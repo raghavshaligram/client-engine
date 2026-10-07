@@ -1,0 +1,9 @@
+# Never commit these
+node_modules/
+.netlify/
+.env
+scraper/config.json
+scraper/logs/
+scraper/gmaps-output/
+scraper/queries-*.txt
+*.csv
