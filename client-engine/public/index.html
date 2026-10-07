@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Engine</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f3d36'/%3E%3Cpath d='M7 11l9 6 9-6M7 10h18v13H7z' fill='none' stroke='%23e9f2ec' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f6f5f1;--panel:#fff;--ink:#1d2421;--muted:#5f6b66;--line:#e2e0d8;--soft:#efede6;
+  --brand:#1f3d36;--brand-ink:#fff;--accent:#2f7a5f;--warn:#a5550e;--warn-bg:#fdf1e3;--bad:#a8322a;--bad-bg:#fbe9e7;--good-bg:#e7f3ec;
+  --radius:10px;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+:root[data-theme="dark"]{--bg:#141816;--panel:#1c211f;--ink:#e6ebe8;--muted:#9aa6a0;--line:#2e3632;--soft:#232a27;--brand:#9fd1bd;--brand-ink:#10201a;--accent:#7cc7a5;--warn:#f0b06a;--warn-bg:#33281a;--bad:#f08b80;--bad-bg:#3a201d;--good-bg:#1d2f27}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141816;--panel:#1c211f;--ink:#e6ebe8;--muted:#9aa6a0;--line:#2e3632;--soft:#232a27;--brand:#9fd1bd;--brand-ink:#10201a;--accent:#7cc7a5;--warn:#f0b06a;--warn-bg:#33281a;--bad:#f08b80;--bad-bg:#3a201d;--good-bg:#1d2f27}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+nav{background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:2px}
+.logo{font-weight:700;font-size:17px;padding:4px 10px 14px;display:flex;gap:8px;align-items:center}
+.logo i{width:24px;height:24px;border-radius:6px;background:var(--brand);display:inline-block}
+nav button{all:unset;cursor:pointer;padding:9px 12px;border-radius:8px;color:var(--muted);display:flex;justify-content:space-between}
+nav button:hover{background:var(--soft);color:var(--ink)}
+nav button.on{background:var(--soft);color:var(--ink);font-weight:600}
+nav .count{font-size:12px;background:var(--brand);color:var(--brand-ink);border-radius:20px;padding:0 7px;line-height:20px}
+nav .grow{flex:1}
+main{padding:22px 28px 60px;max-width:1180px;width:100%}
+header.top{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+header.top h1{font-size:22px;margin:0;flex:1}
+.seg{display:inline-flex;background:var(--soft);border-radius:9px;padding:3px}
+.seg button{all:unset;cursor:pointer;padding:6px 12px;border-radius:7px;font-weight:500;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.card h2{font-size:16px;margin:0 0 4px}
+.card h3{font-size:14px;margin:14px 0 6px}
+.sub{color:var(--muted);margin:0 0 12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.stat b{display:block;font-size:26px;line-height:1.2}
+.stat span{color:var(--muted);font-size:13px}
+.btn{cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;border-radius:8px;font:inherit;font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{min-height:90px;resize:vertical}
+textarea.mail{min-height:170px;font-family:inherit;line-height:1.55}
+label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+label small{font-weight:400;color:var(--muted)}
+.note{padding:10px 14px;border-radius:8px;margin:10px 0;background:var(--soft)}
+.note.warn{background:var(--warn-bg);color:var(--warn)}
+.note.bad{background:var(--bad-bg);color:var(--bad)}
+.note.good{background:var(--good-bg)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:12px;border-radius:20px;padding:1px 9px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--accent)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.mono{font-family:var(--mono);font-size:12.5px}
+pre.foot{white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.5;color:var(--muted);margin:6px 0 0;padding:8px 10px;border-left:3px solid var(--line)}
+.mail-card{display:grid;grid-template-columns:260px 1fr;gap:18px}
+.mail-card .who{font-size:13.5px}
+.mail-card .who b{font-size:15px;display:block}
+.log{font-family:var(--mono);font-size:12.5px;background:var(--soft);border-radius:8px;padding:10px;max-height:260px;overflow:auto;white-space:pre-wrap}
+.empty{color:var(--muted);text-align:center;padding:30px}
+.hide{display:none!important}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;max-width:420px;z-index:9;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.gate{max-width:420px;margin:12vh auto;padding:0 16px}
+code{font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:1px 5px;border-radius:4px}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  nav{position:static;height:auto;flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line);padding:10px}
+  nav .grow,.logo{display:none}
+  main{padding:16px}
+  .grid2,.grid3,.mail-card{grid-template-columns:1fr}
+  .row > .grow-text{flex-basis:100%}
+  table{display:block;overflow-x:auto}
+}
+</style>
+</head>
+<body>
+<div id="gate" class="gate hide">
+  <div class="card">
+    <h2>Client Engine</h2>
+    <p class="sub">Enter the app key you set as <code>APP_KEY</code> in Netlify.</p>
+    <input id="keyIn" type="password" autocomplete="current-password" placeholder="App key">
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="keyBtn">Open</button><span id="keyErr" class="muted small"></span></div>
+  </div>
+</div>
+
+<div id="app" class="shell hide">
+  <nav id="nav">
+    <div class="logo"><i></i>Client Engine</div>
+    <button data-view="today">Today</button>
+    <button data-view="find">Find people</button>
+    <button data-view="prospects">Prospects</button>
+    <button data-view="queue">Queue <span class="count hide" id="nQueue"></span></button>
+    <button data-view="send">Send</button>
+    <button data-view="replies">Replies <span class="count hide" id="nReplies"></span></button>
+    <button data-view="results">Results</button>
+    <div class="grow"></div>
+    <button data-view="products">Products</button>
+    <button data-view="settings">Settings</button>
+  </nav>
+  <main>
+    <header class="top">
+      <h1 id="title">Today</h1>
+      <div class="seg" id="productSeg"></div>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="toast" class="toast hide"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+'use strict';
+// ---------------------------------------------------------------- basics
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const store = { get(k, d) { try { const v = localStorage.getItem('ce.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+                set(k, v) { try { localStorage.setItem('ce.' + k, JSON.stringify(v)); } catch {} } };
+let KEY = store.get('key', '');
+const S = { view: store.get('view', 'today'), product: store.get('product', 'pdfmacro'), setup: null, products: [], senders: [], tokens: {}, sending: {}, busy: false };
+
+function toast(msg, ms = 3500) { const t = $('#toast'); t.textContent = msg; t.classList.remove('hide'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hide'), ms); }
+
+async function api(action, data = {}) {
+  const res = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-key': KEY }, body: JSON.stringify({ action, ...data }) });
+  const out = await res.json().catch(() => ({ error: 'The server sent back something unexpected (' + res.status + ')' }));
+  if (res.status === 401) { showGate('Wrong app key.'); throw new Error('Wrong app key'); }
+  if (!res.ok || out.error) throw new Error(out.error || 'Request failed');
+  return out;
+}
+const product = () => S.products.find(p => p.id === S.product) || S.products[0];
+const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+const fmtTime = d => d ? new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+
+// ---------------------------------------------------------------- start
+function showGate(msg) { $('#app').classList.add('hide'); $('#gate').classList.remove('hide'); $('#keyErr').textContent = msg || ''; $('#keyIn').focus(); }
+$('#keyBtn').onclick = async () => { KEY = $('#keyIn').value.trim(); store.set('key', KEY); boot(); };
+$('#keyIn').onkeydown = e => { if (e.key === 'Enter') $('#keyBtn').click(); };
+
+async function boot() {
+  if (!KEY) return showGate();
+  try {
+    S.setup = await api('setup.status');
+  } catch (e) { if (!/app key/i.test(e.message)) showGate(e.message); return; }
+  $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
+  S.products = S.setup.products || []; S.senders = S.setup.senders || [];
+  if (!S.products.find(p => p.id === S.product)) S.product = S.products[0]?.id;
+  renderProductSeg(); go(S.view);
+  refreshBadges();
+}
+
+function renderProductSeg() {
+  $('#productSeg').innerHTML = S.products.map(p => `<button data-p="${p.id}" class="${p.id === S.product ? 'on' : ''}">${esc(p.name)}${p.paused ? ' ⏸' : ''}</button>`).join('');
+  $('#productSeg').querySelectorAll('button').forEach(b => b.onclick = () => { S.product = b.dataset.p; store.set('product', S.product); renderProductSeg(); go(S.view); refreshBadges(); });
+}
+$('#nav').querySelectorAll('button[data-view]').forEach(b => b.onclick = () => go(b.dataset.view));
+
+const TITLES = { today: 'Today', find: 'Find people', prospects: 'Prospects', queue: 'Queue', send: 'Send', replies: 'Replies', results: 'Results', products: 'Products', settings: 'Settings' };
+async function go(view) {
+  S.view = view; store.set('view', view);
+  $('#nav').querySelectorAll('button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+  $('#title').textContent = TITLES[view];
+  $('#productSeg').classList.toggle('hide', view === 'settings');
+  $('#view').innerHTML = '<div class="empty">Loading…</div>';
+  try { await VIEWS[view](); } catch (e) { $('#view').innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
+}
+
+async function refreshBadges() {
+  try {
+    const [q, r] = await Promise.all([api('queue.list', { productId: S.product }), api('replies.list', { productId: S.product })]);
+    const nq = q.messages.length, nr = r.replies.length;
+    $('#nQueue').textContent = nq; $('#nQueue').classList.toggle('hide', !nq);
+    $('#nReplies').textContent = nr; $('#nReplies').classList.toggle('hide', !nr);
+  } catch {}
+}
+
+// ---------------------------------------------------------------- CSV
+function detectDelim(text) {
+  const first = text.split(/\r?\n/, 1)[0];
+  const c = d => first.split(d).length;
+  return [['\t', c('\t')], [',', c(',')], [';', c(';')], ['|', c('|')]].sort((a, b) => b[1] - a[1])[0][0];
+}
+function parseCSV(text, delim) {
+  text = text.replace(/^﻿/, '');
+  delim = delim || detectDelim(text);
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += ch;
+    } else if (ch === '"' && f === '') q = true;
+    else if (ch === delim) { row.push(f); f = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(f); f = ''; if (row.some(x => x !== '')) rows.push(row); row = []; }
+    else f += ch;
+  }
+  row.push(f); if (row.some(x => x !== '')) rows.push(row);
+  const head = (rows.shift() || []).map(h => h.trim());
+  return { head, rows: rows.map(r => Object.fromEntries(head.map((h, i) => [h, (r[i] ?? '').trim()]))) };
+}
+const readFile = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsText(f); });
+
+// ---------------------------------------------------------------- Today
+const VIEWS = {};
+VIEWS.today = async () => {
+  const p = product();
+  const [st, q, r, pl, ap] = await Promise.all([
+    api('stats', { productId: p.id }), api('queue.list', { productId: p.id }), api('replies.list', { productId: p.id }), api('prospects.list', { productId: p.id, limit: 1 }),
+    api('autopilot.status'), api('senders.status').then(x => { S.senders = x.senders; }),
+  ]);
+  const a = ap.products[p.id] || {};
+  const c = pl.counts, drafts = q.messages.filter(m => m.status === 'draft').length, approved = q.messages.length - drafts;
+  const mySenders = S.senders.filter(s => s.product_id === p.id);
+  const missing = [];
+  if (!p.from_name || !p.postal_address) missing.push(`your name and postal address on <a href="#" data-go="products">Products</a>`);
+  if (!mySenders.length) missing.push(`a sending inbox in <a href="#" data-go="settings">Settings</a>`);
+  if (mySenders.some(s => s.mode !== 'browser') && !ap.serverGmail) missing.push(`the Google service account (<code>GOOGLE_SA_EMAIL</code> and <code>GOOGLE_SA_KEY</code>) in Netlify`);
+  $('#view').innerHTML = `
+    ${p.paused ? `<div class="note bad"><b>Sending is paused.</b> ${esc(p.paused_reason || '')} <button class="btn small" id="resume">Resume sending</button></div>` : ''}
+    ${missing.length ? `<div class="note warn">Before ${esc(p.name)} can send, add ${missing.join(' and ')}.</div>` : ''}
+    <div class="card">
+      <div class="row"><div class="grow-text" style="flex:1">
+        <h2>Autopilot: ${a.on ? '<span class="pill good">On</span>' : a.mode === 'off' ? '<span class="pill">Off</span>' : '<span class="pill warn">Learning</span>'}</h2>
+        <p class="sub" style="margin:0">${a.on
+          ? `Finding, writing, sending and following up on its own. Drafts the checker scores 8+ send without you; the rest wait in the queue.`
+          : a.mode === 'off' ? 'Every email waits for your approval.'
+          : `You've approved ${a.approvedByYou} of ${a.needed} first emails${a.editRate != null ? `, editing ${a.editRate}% of recent ones` : ''}. It switches on by itself after ${a.needed}, once you're editing fewer than 15%.`}</p></div>
+        <select id="apMode" style="width:auto"><option value="auto">Switch on when ready</option><option value="on">Always on</option><option value="off">Off</option></select>
+      </div>
+      <div class="row" style="margin-top:12px"><span class="small muted" style="flex:1">It runs every 10 minutes on its own${ap.digestTo ? ' and emails you a summary at 9am' : ''}. Sends go out on weekdays, 8am to 5pm US Central.</span>
+        <button class="btn small" data-run="autopilot.research">Write now</button><button class="btn small" data-run="autopilot.send">Send now</button><button class="btn small" data-run="autopilot.replies">Check replies now</button></div>
+      <div id="apLog" class="log hide" style="margin-top:10px"></div>
+    </div>
+    <div class="grid3">
+      <div class="stat"><b>${drafts}</b><span>drafts to read</span></div>
+      <div class="stat"><b>${approved}</b><span>approved, waiting to send</span></div>
+      <div class="stat"><b>${r.replies.length}</b><span>replies to answer</span></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>What needs you</h2>
+      <p class="sub">Everything else runs on its own.</p>
+      <table>
+        <tr><td>Answer replies <span class="muted small">(answers are drafted for you)</span></td><td class="num"><button class="btn small primary" data-go="replies">Open replies (${r.replies.length})</button></td></tr>
+        <tr><td>${a.on ? `Drafts the checker scored under 8 <span class="muted small">(optional: approve, fix or drop)</span>` : `Read and approve drafts <span class="muted small">(this is how it learns your voice)</span>`}</td><td class="num"><button class="btn small" data-go="queue">Open queue (${drafts})</button></td></tr>
+        ${mySenders.some(s => s.mode === 'browser') ? `<tr><td>Send from your browser inboxes <span class="muted small">(keep the tab open)</span></td><td class="num"><button class="btn small" data-go="send">Open sending</button></td></tr>` : ''}
+      </table>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>People</h2>
+        <table>
+          ${[['new', 'Waiting for a website check'], ['scanned', 'Ready to write to'], ['drafted', 'Email drafted'], ['contacted', 'In sequence'], ['replied', 'Replied'], ['interested', 'Interested'], ['won', 'Customers'], ['rest', 'Resting (not now)'], ['skipped', 'Skipped']]
+            .map(([k, l]) => `<tr><td>${l}</td><td class="num">${c[k] || 0}</td></tr>`).join('')}
+        </table>
+      </div>
+      <div class="card"><h2>Sent today</h2>
+        ${mySenders.length ? `<table>${mySenders.map(s => `<tr><td>${esc(s.email)}${s.segment ? ` <span class="pill">${esc(s.segment)}</span>` : ''}</td><td class="num">${s.plan?.warming ? `<span class="pill warn">warming, day ${s.plan.day + 1}</span>` : `${st.sentToday[s.email] || 0} of ${s.plan ? s.plan.coldCap : s.daily_cap}`}</td></tr>`).join('')}</table>` : '<p class="muted">No inbox set up yet.</p>'}
+        <h3>So far</h3>
+        <table>
+          <tr><td>People emailed</td><td class="num">${st.totals.people || 0}</td></tr>
+          <tr><td>Replied</td><td class="num">${st.totals.replied || 0}</td></tr>
+          <tr><td>Interested or asking</td><td class="num">${st.totals.positive || 0}</td></tr>
+          <tr><td>Bought</td><td class="num">${st.totals.won || 0}</td></tr>
+        </table>
+      </div>
+    </div>`;
+  wireGo();
+  const rb = $('#resume'); if (rb) rb.onclick = async () => { await api('products.resume', { id: p.id }); await reloadProducts(); go('today'); };
+  $('#apMode').value = a.mode || 'auto';
+  $('#apMode').onchange = async e => { await api('autopilot.mode', { productId: p.id, mode: e.target.value }); go('today'); };
+  $('#view').querySelectorAll('[data-run]').forEach(b => b.onclick = async () => {
+    const log = $('#apLog'); log.classList.remove('hide'); b.disabled = true;
+    try { const r = await api(b.dataset.run); log.textContent = (r.log || []).join('\n') || 'Nothing to do right now.'; }
+    catch (e) { log.textContent = 'Error: ' + e.message; }
+    b.disabled = false;
+  });
+};
+function wireGo() { $('#view').querySelectorAll('[data-go]').forEach(a => a.onclick = e => { e.preventDefault(); go(a.dataset.go); }); }
+async function reloadProducts() { S.setup = await api('setup.status'); S.products = S.setup.products; S.senders = S.setup.senders; renderProductSeg(); }
+
+// ---------------------------------------------------------------- Find
+VIEWS.find = async () => {
+  const p = product();
+  const segOpts = (p.segments || []).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const isRegistry = p.id === 'keephoa';
+  const left = (await api('prospects.list', { productId: p.id, limit: 1 })).counts.new || 0;
+  $('#view').innerHTML = `
+    <div class="card">
+      <h2>1. Who to look for</h2>
+      <label>Segment</label><select id="fSeg">${segOpts}</select>
+      ${isRegistry ? `
+        <p class="sub" style="margin-top:12px">KeepHOA prospects come from state HOA registry files (see your outreach plan): Colorado and Virginia first. Download the file from the state, read its terms of use, then import it below.</p>
+      ` : `
+        <div class="grid2">
+          <div><label>Business types <small>one per line</small></label><textarea id="fTypes" placeholder="${p.id === 'pdfmacro' ? 'family law attorney\ndivorce lawyer' : 'plumber\nhvac contractor\nelectrician'}">${esc(store.get('types.' + p.id, ''))}</textarea></div>
+          <div><label>Cities <small>one per line, with state</small></label><textarea id="fCities" placeholder="Austin, TX\nDenver, CO">${esc(store.get('cities.' + p.id, ''))}</textarea></div>
+        </div>
+        <div class="row" style="margin-top:10px"><button class="btn primary" id="fQueries">Download queries.txt</button><span class="muted small" id="fQn"></span></div>
+        <div class="note" style="margin-top:14px"><b>Nightly, on its own:</b> <button class="btn small" id="fPlan">Add these to the nightly plan</button>
+          <span class="small muted">The scraper on your computer runs these searches at night, only while ${esc(p.name)} has fewer than 150 people ready, and never repeats a search within 90 days.</span>
+          <div id="fPlanList" class="small" style="margin-top:8px"></div></div>
+        <h3>2. Or run the scraper by hand</h3>
+        <p class="small">Put <code>queries.txt</code> in the <code>scraper</code> folder that came with this app, then run <code>run-scraper.ps1</code> (Windows) or <code>run-scraper.sh</code> (Mac). It needs Docker Desktop running. Results land in <code>scraper/gmaps-output</code>.</p>
+        <p class="small muted">The scraper collects public Google Maps listings, which Google's terms don't allow. The risk is Google blocking your connection for a while. Keep runs small: one segment, a few cities.</p>
+      `}
+    </div>
+    <div class="card">
+      <h2>${isRegistry ? '2' : '3'}. Import the ${isRegistry ? 'registry file' : 'results'}</h2>
+      <p class="sub">${isRegistry ? 'CSV or tab-delimited. You\'ll match its columns below.' : 'Pick the results CSV. Chains, listings without a website, non-US places, junk emails and anyone on your do-not-contact list are dropped.'}</p>
+      <input type="file" id="fFile" accept=".csv,.txt,.tsv,text/csv,text/plain">
+      <div id="fMap"></div>
+      <div id="fOut"></div>
+    </div>
+    ${isRegistry ? '' : `<div class="card">
+      <h2>4. Read their websites</h2>
+      <p class="sub">Loads each home page once, notes chat, booking and click-to-call, keeps a short extract the writer may quote, and scores everyone.</p>
+      <div class="row"><button class="btn primary" id="fScan" ${left ? '' : 'disabled'}>Read ${left} website${left === 1 ? '' : 's'}</button><button class="btn hide" id="fStop">Stop</button></div>
+      <div id="fScanLog" class="log hide" style="margin-top:10px"></div>
+    </div>`}`;
+  const seg = $('#fSeg'); seg.value = store.get('seg.' + p.id, seg.value); seg.onchange = () => store.set('seg.' + p.id, seg.value);
+
+  if (!isRegistry) {
+    const loadPlan = async () => {
+      const r = await api('scrape.plan.list', { productId: p.id });
+      const el = $('#fPlanList');
+      if (!r.rows.length) { el.textContent = 'No nightly searches yet.'; return; }
+      const due = r.rows.filter(x => !x.last_run_at).length;
+      el.innerHTML = `<details><summary>${r.rows.length} searches in the plan, ${due} not run yet</summary><table>${r.rows.map(x => `<tr><td>${esc(x.query)}</td><td class="muted">${esc(x.segment || '')}</td><td class="muted">${x.last_run_at ? 'ran ' + fmtDate(x.last_run_at) : 'not yet'}</td><td class="num"><button class="btn small danger" data-del="${x.id}">Remove</button></td></tr>`).join('')}</table></details>`;
+      el.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { await api('scrape.plan.remove', { id: b.dataset.del }); loadPlan(); });
+    };
+    loadPlan();
+    $('#fPlan').onclick = async () => {
+      const types = $('#fTypes').value.split('\n'), cities = $('#fCities').value.split('\n');
+      store.set('types.' + p.id, $('#fTypes').value); store.set('cities.' + p.id, $('#fCities').value);
+      try { const r = await api('scrape.plan.save', { productId: p.id, segment: $('#fSeg').value, types, cities }); toast(`${r.added} searches added${r.total > r.added ? ` (${r.total - r.added} were already in the plan)` : ''}.`); loadPlan(); }
+      catch (e) { toast(e.message); }
+    };
+    $('#fQueries').onclick = () => {
+      const types = $('#fTypes').value.split('\n').map(s => s.trim()).filter(Boolean);
+      const cities = $('#fCities').value.split('\n').map(s => s.trim()).filter(Boolean);
+      store.set('types.' + p.id, $('#fTypes').value); store.set('cities.' + p.id, $('#fCities').value);
+      if (!types.length || !cities.length) return toast('Add at least one business type and one city.');
+      const lines = []; for (const c of cities) for (const t of types) lines.push(`${t} in ${c}`);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'text/plain' })); a.download = 'queries.txt'; a.click();
+      $('#fQn').textContent = `${lines.length} searches`;
+    };
+    let stop = false;
+    $('#fScan').onclick = async () => {
+      stop = false; $('#fScan').disabled = true; $('#fStop').classList.remove('hide');
+      const log = $('#fScanLog'); log.classList.remove('hide'); log.textContent = '';
+      try {
+        while (!stop) {
+          const r = await api('prospects.scan', { productId: p.id });
+          r.scanned.forEach(s => log.textContent += `${s.name}: score ${s.score}${s.error ? ' (site: ' + s.error + ')' : ''}\n`);
+          log.scrollTop = log.scrollHeight;
+          $('#fScan').textContent = `${r.left} left`;
+          if (!r.left || !r.scanned.length) break;
+        }
+        log.textContent += stop ? 'Stopped.\n' : 'All read. Head to the Queue to write drafts.\n';
+        if (!stop) $('#fScan').textContent = 'All read';
+      } catch (e) { log.textContent += 'Error: ' + e.message + '\n'; }
+      $('#fStop').classList.add('hide');
+    };
+    $('#fStop').onclick = () => { stop = true; };
+  }
+
+  $('#fFile').onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    const { head, rows } = parseCSV(await readFile(file));
+    if (!rows.length) return toast('That file has no rows.');
+    if (isRegistry) return registryMapping(p, head, rows, file.name);
+    if (!head.includes('title') || !head.includes('emails')) return $('#fOut').innerHTML = `<div class="note bad">This doesn't look like the scraper's CSV (no <code>title</code> and <code>emails</code> columns). Did the scraper run with <code>-email</code>?</div>`;
+    importRows(p, 'maps', rows, file.name);
+  };
+};
+
+const REG_FIELDS = [
+  ['name', 'Association name', /assoc|name|business|entity/i], ['email', 'Email', /e-?mail/i], ['city', 'City', /city/i], ['state', 'State', /^state|st$/i],
+  ['units', 'Units', /unit|lots|homes|doors/i], ['manager', 'Management company', /manag|mgmt/i], ['self_managed', 'Self-managed flag', /self/i],
+  ['county', 'County', /county/i], ['type', 'Community type', /type|kind/i], ['contact', 'Contact name', /agent|contact|officer|president/i], ['phone', 'Phone', /phone|tel/i],
+];
+function registryMapping(p, head, rows, fileName) {
+  const guess = re => head.find(h => re.test(h)) || '';
+  const opts = sel => `<option value="">(not in this file)</option>` + head.map(h => `<option ${h === sel ? 'selected' : ''}>${esc(h)}</option>`).join('');
+  $('#fMap').innerHTML = `
+    <p class="small" style="margin-top:12px"><b>${rows.length}</b> rows in <b>${esc(fileName)}</b>. Match the columns:</p>
+    <div class="grid3">${REG_FIELDS.map(([k, l, re]) => `<div><label>${l}</label><select data-k="${k}">${opts(guess(re))}</select></div>`).join('')}
+      <div><label>State if the file has none</label><input id="fState" maxlength="2" placeholder="CO"></div></div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="fGo">Import ${rows.length} rows</button></div>`;
+  $('#fGo').onclick = () => {
+    const map = {}; $('#fMap').querySelectorAll('select[data-k]').forEach(s => { if (s.value) map[s.dataset.k] = s.value; });
+    if (!map.name || !map.email) return toast('Match at least the name and email columns.');
+    const mapped = rows.map(r => Object.fromEntries(Object.entries(map).map(([k, col]) => [k, r[col]])));
+    importRows(p, 'registry', mapped, fileName, $('#fState').value.trim().toUpperCase());
+  };
+}
+
+async function importRows(p, kind, rows, fileName, defaultState) {
+  const out = $('#fOut'); const segment = $('#fSeg').value;
+  let added = 0; const skipped = {};
+  out.innerHTML = `<div class="note">Importing… 0 of ${rows.length}</div>`;
+  try {
+    for (let i = 0; i < rows.length; i += 300) {
+      const r = await api('prospects.import', { productId: p.id, segment, kind, rows: rows.slice(i, i + 300), sourceFile: fileName, defaultState });
+      added += r.added; for (const [k, v] of Object.entries(r.skipped)) skipped[k] = (skipped[k] || 0) + v;
+      out.innerHTML = `<div class="note">Importing… ${Math.min(i + 300, rows.length)} of ${rows.length}</div>`;
+    }
+    out.innerHTML = `<div class="note good"><b>${added} people added.</b> ${kind === 'maps' ? 'Next: read their websites below.' : 'They\'re scored and ready. Head to the Queue to write drafts.'}</div>
+      ${Object.keys(skipped).length ? `<table><tr><th>Left out</th><th class="num">Rows</th></tr>${Object.entries(skipped).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join('')}</table>` : ''}`;
+    if (kind === 'maps') { const n = (await api('prospects.list', { productId: p.id, limit: 1 })).counts.new; const b = $('#fScan'); if (b) { b.disabled = !n; b.textContent = `Read ${n} websites`; } }
+  } catch (e) { out.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
+}
+
+// ---------------------------------------------------------------- Prospects
+VIEWS.prospects = async () => {
+  const p = product();
+  const status = store.get('pstatus', 'scanned');
+  const r = await api('prospects.list', { productId: p.id, status, limit: 300 });
+  const tabs = [['scanned', 'Ready'], ['new', 'Not read yet'], ['drafted', 'Drafted'], ['contacted', 'In sequence'], ['replied,interested', 'Replied'], ['won', 'Customers'], ['rest', 'Resting'], ['skipped', 'Skipped'], ['done', 'Finished']];
+  const n = k => k.split(',').reduce((a, s) => a + (r.counts[s] || 0), 0);
+  $('#view').innerHTML = `
+    <div class="seg" style="margin-bottom:14px;flex-wrap:wrap">${tabs.map(([k, l]) => `<button data-s="${k}" class="${k === status ? 'on' : ''}">${l} (${n(k)})</button>`).join('')}</div>
+    <div class="card">
+      ${status === 'scanned' ? `<p class="sub">Sorted by score. Only people at or above the minimum score of ${p.rules?.min_score ?? 0} get emails. <button class="btn small" id="rescore">Rescore everyone</button></p>` : ''}
+      ${r.rows.length ? `<table><tr><th>Who</th><th>Score</th><th>Why</th><th></th></tr>
+        ${r.rows.map(x => `<tr data-id="${x.id}">
+          <td><b>${esc(x.name)}</b><br><span class="small">${esc(x.email)}</span><br><span class="muted small">${esc([x.category, x.city, x.state].filter(Boolean).join(' · '))}</span>
+            ${x.website ? `<br><a class="small" href="${esc(x.website)}" target="_blank" rel="noopener noreferrer">${esc(x.website.replace(/^https?:\/\//, '').slice(0, 40))}</a>` : ''}</td>
+          <td class="num"><b>${x.score}</b></td>
+          <td class="small">${esc(x.score_why)}${x.skip_reason ? `<br><span class="pill warn">${esc(x.skip_reason)}</span>` : ''}${x.detail ? `<br><span class="muted">Detail used: ${esc(x.detail)}</span>` : ''}
+            ${x.next_due_at ? `<br><span class="muted">Next email due ${fmtDate(x.next_due_at)}</span>` : ''}${x.rest_until ? `<br><span class="muted">Check in after ${fmtDate(x.rest_until)}</span>` : ''}
+            ${x.extra?.test_call ? `<br><span class="pill">Test call: ${esc(x.extra.test_call)}</span>` : ''}</td>
+          <td class="num" style="white-space:nowrap">
+            ${['scanned', 'new'].includes(x.status) ? `<button class="btn small" data-a="skip">Skip</button>` : ''}
+            ${x.status === 'skipped' ? `<button class="btn small" data-a="unskip">Bring back</button>` : ''}
+            ${p.id === 'ringsparrow' && ['scanned', 'new'].includes(x.status) ? `<button class="btn small" data-a="call">Test call</button>` : ''}
+            ${['contacted', 'replied', 'interested', 'rest', 'done'].includes(x.status) ? `<button class="btn small" data-a="won">Bought</button>` : ''}
+            <button class="btn small danger" data-a="block" title="Never email this address again">Block</button>
+          </td></tr>`).join('')}</table>` : '<div class="empty">Nobody here.</div>'}
+    </div>`;
+  $('#view').querySelectorAll('.seg button').forEach(b => b.onclick = () => { store.set('pstatus', b.dataset.s); go('prospects'); });
+  const rs = $('#rescore'); if (rs) rs.onclick = async () => { rs.disabled = true; let off = 0, more = true; while (more) { const x = await api('prospects.rescore', { productId: p.id, offset: off }); off += 200; more = x.more; } go('prospects'); };
+  $('#view').querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+    const tr = b.closest('tr'), id = tr.dataset.id, x = r.rows.find(y => y.id === id), a = b.dataset.a;
+    try {
+      if (a === 'skip') await api('prospects.update', { id, patch: { status: 'skipped', skip_reason: 'skipped by you' } });
+      if (a === 'unskip') await api('prospects.update', { id, patch: { status: x.website && !x.signals?.chat && !Object.keys(x.signals || {}).length ? 'new' : 'scanned', skip_reason: null } });
+      if (a === 'call') {
+        const note = prompt('When did you call and what happened? For example: "Tue 7 Oct, 4:40pm CT, no answer, no text back". Leave empty to clear.', x.extra?.test_call || '');
+        if (note === null) return;
+        await api('prospects.update', { id, patch: { test_call: note.trim() } });
+      }
+      if (a === 'won') await api('prospect.won', { id });
+      if (a === 'block') { if (!confirm(`Never email ${x.email} again, from any product?`)) return; await api('suppress.add', { email: x.email, reason: 'blocked by you' }); }
+      go('prospects');
+    } catch (e) { toast(e.message); }
+  });
+};
+
+// ---------------------------------------------------------------- Queue
+VIEWS.queue = async () => {
+  const p = product();
+  const q = await api('queue.list', { productId: p.id });
+  const drafts = q.messages.filter(m => m.status === 'draft'), approved = q.messages.filter(m => m.status === 'approved');
+  $('#view').innerHTML = `
+    <div class="card">
+      <div class="row"><div class="grow-text" style="flex:1"><h2>Write drafts</h2><p class="sub" style="margin:0">Follow-ups that are due come first, then the highest scores. Each email is written, checked by a second pass, and rewritten once if it fails.</p></div>
+      <select id="qN" style="width:auto"><option>5</option><option selected>10</option><option>20</option><option>30</option></select>
+      <button class="btn primary" id="qWrite">Write drafts</button><button class="btn hide" id="qStop">Stop</button></div>
+      <div id="qLog" class="log hide" style="margin-top:10px"></div>
+    </div>
+    ${drafts.length > 1 ? `<div class="row" style="margin-bottom:12px"><span class="muted small">${drafts.length} drafts to read, ${approved.length} approved.</span><span style="flex:1"></span>
+      <button class="btn small" id="qAll" title="Only drafts the checker scored 8 or more">Approve all scored 8+</button></div>` : ''}
+    <div id="qList">${q.messages.length ? q.messages.map(m => mailCard(m)).join('') : '<div class="card empty">Nothing waiting. Write some drafts above.</div>'}</div>`;
+  let stop = false;
+  $('#qWrite').onclick = async () => {
+    stop = false; const n = +$('#qN').value; const log = $('#qLog'); log.classList.remove('hide'); log.textContent = '';
+    $('#qWrite').disabled = true; $('#qStop').classList.remove('hide');
+    let made = 0;
+    try {
+      for (let i = 0; i < n * 2 && made < n && !stop; i++) {
+        let r = await api('draft.next', { productId: p.id });
+        if (r.retry) { log.textContent += `${r.prospect}: rewriting (${r.feedback.slice(0, 2).join('; ')})\n`; r = await api('draft.next', { productId: p.id, prospectId: r.prospectId, feedback: r.feedback, attempt: 2 }); }
+        if (r.done) { log.textContent += r.reason + '\n'; break; }
+        if (r.drafted) { made++; log.textContent += `${r.prospect}: drafted\n`; }
+        else if (r.skipped) log.textContent += `${r.prospect}: skipped, ${r.skipped}\n`;
+        else if (r.dropped) log.textContent += `${r.prospect}: dropped after two tries (${r.dropped.slice(0, 2).join('; ')})\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+    } catch (e) { log.textContent += 'Error: ' + e.message + '\n'; }
+    log.textContent += `${made} new draft${made === 1 ? '' : 's'}.\n`;
+    $('#qStop').classList.add('hide'); $('#qWrite').disabled = false;
+    if (made) setTimeout(() => go('queue'), 600);
+  };
+  $('#qStop').onclick = () => { stop = true; };
+  const all = $('#qAll'); if (all) all.onclick = async () => { const r = await api('queue.approveAll', { productId: p.id, minScore: 8 }); toast(`${r.approved} approved.`); go('queue'); };
+  wireMailCards(q.messages);
+  refreshBadges();
+};
+function mailCard(m) {
+  const x = m.prospect || {};
+  return `<div class="card mail-card" data-id="${m.id}">
+    <div class="who">
+      <b>${esc(x.name)}</b>${esc(x.email)}<br><span class="muted">${esc([x.city, x.state].filter(Boolean).join(', '))}${x.segment ? ' · ' + esc(x.segment) : ''}</span>
+      ${x.website ? `<br><a href="${esc(x.website)}" target="_blank" rel="noopener noreferrer">website</a>` : ''}
+      <p><span class="pill">Email ${m.step}</span> <span class="pill">${esc(m.angle || '')}</span> ${m.status === 'approved' ? '<span class="pill good">Approved</span>' : ''}</p>
+      <p class="small"><b>Score ${x.score}</b><br><span class="muted">${esc(x.score_why || '')}</span></p>
+      ${x.detail ? `<p class="small"><b>Detail used</b><br>${esc(x.detail)}</p>` : ''}
+      <p class="small"><b>Checker ${m.check_score}/10</b>${m.check_notes ? `<br><span class="muted">${esc(m.check_notes)}</span>` : ''}</p>
+      ${x.site_text ? `<details class="small"><summary>What their site says</summary><p class="muted" style="white-space:pre-wrap">${esc(x.site_text.slice(0, 900))}</p></details>` : ''}
+    </div>
+    <div>
+      <label>Subject</label><input data-f="subject" value="${esc(m.subject)}" ${m.step > 1 ? 'readonly title="Follow-ups reply in the same thread"' : ''}>
+      <label>Email</label><textarea class="mail" data-f="body">${esc(m.body)}</textarea>
+      <pre class="foot">${esc(m.footer)}</pre>
+      <div class="row" style="margin-top:10px">
+        ${m.status === 'draft' ? `<button class="btn primary" data-a="approve">Approve</button>` : `<button class="btn" data-a="unapprove">Back to draft</button>`}
+        <button class="btn" data-a="save">Save edits</button>
+        <button class="btn" data-a="redraft">Write again</button>
+        <span style="flex:1"></span>
+        <button class="btn danger" data-a="reject">${m.step === 1 ? "Don't email" : 'Stop here'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function wireMailCards(msgs) {
+  document.querySelectorAll('.mail-card').forEach(card => card.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+    const id = card.dataset.id, a = b.dataset.a;
+    const subject = card.querySelector('[data-f=subject]').value, body = card.querySelector('[data-f=body]').value;
+    b.disabled = true;
+    try {
+      if (a === 'approve') await api('message.save', { id, subject, body, status: 'approved' });
+      if (a === 'unapprove') await api('message.save', { id, subject, body, status: 'draft' });
+      if (a === 'save') { await api('message.save', { id, subject, body }); toast('Saved.'); b.disabled = false; return; }
+      if (a === 'reject') await api('message.save', { id, status: 'rejected' });
+      if (a === 'redraft') {
+        const r = await api('message.redraft', { id });
+        let d = await api('draft.next', { productId: S.product, prospectId: r.prospectId });
+        if (d.retry) d = await api('draft.next', { productId: S.product, prospectId: r.prospectId, feedback: d.feedback, attempt: 2 });
+        toast(d.drafted ? 'Rewritten.' : d.skipped ? 'Skipped: ' + d.skipped : 'Dropped after two tries.');
+      }
+      go('queue');
+    } catch (e) { toast(e.message); b.disabled = false; }
+  }));
+}
+
+// ---------------------------------------------------------------- Gmail
+const SCOPES = 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly';
+function connectInbox(email) {
+  return new Promise((ok, no) => {
+    if (!S.setup.googleClientId) return no(new Error('GOOGLE_CLIENT_ID is not set in Netlify.'));
+    if (!window.google?.accounts?.oauth2) return no(new Error('Google sign-in did not load. Check your connection and reload.'));
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: S.setup.googleClientId, scope: SCOPES, hint: email, prompt: '',
+      callback: async r => {
+        if (r.error) return no(new Error(r.error_description || r.error));
+        try {
+          const prof = await (await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: 'Bearer ' + r.access_token } })).json();
+          if (!prof.emailAddress || prof.emailAddress.toLowerCase() !== email) return no(new Error(`You signed in as ${prof.emailAddress || 'another account'}, not ${email}.`));
+          S.tokens[email] = { token: r.access_token, until: Date.now() + (r.expires_in - 120) * 1000 };
+          ok();
+        } catch (e) { no(e); }
+      },
+      error_callback: e => no(new Error(e.message || 'Google sign-in was closed')),
+    });
+    client.requestAccessToken();
+  });
+}
+const tokenFor = email => { const t = S.tokens[email]; return t && t.until > Date.now() ? t.token : null; };
+async function gmail(email, path, opts = {}) {
+  const tok = tokenFor(email); if (!tok) throw new Error(`Reconnect ${email} (Google sign-in lasts an hour).`);
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { ...opts, headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error?.message || 'Gmail error ' + res.status);
+  return data;
+}
+const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const encWord = s => /^[\x20-\x7e]*$/.test(s) ? s : '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(s))) + '?=';
+function buildMime({ from, fromName, to, subject, body, inReplyTo, messageId }) {
+  const h = [
+    `From: ${encWord(fromName)} <${from}>`, `To: ${to}`, `Subject: ${encWord(subject)}`,
+    `Message-ID: ${messageId}`, `Date: ${new Date().toUTCString()}`, 'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64',
+  ];
+  if (inReplyTo) h.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
+  const b = btoa(unescape(encodeURIComponent(body.replace(/\r?\n/g, '\r\n')))).replace(/.{76}/g, '$&\r\n');
+  return b64url(h.join('\r\n') + '\r\n\r\n' + b);
+}
+async function sendViaGmail(sender, m) {
+  const messageId = `<${crypto.randomUUID()}@${sender.split('@')[1]}>`;
+  const raw = buildMime({ from: sender, fromName: m.fromName, to: m.to, subject: m.subject, body: m.body, inReplyTo: m.inReplyTo, messageId });
+  const sent = await gmail(sender, 'messages/send', { method: 'POST', body: JSON.stringify(m.threadId ? { raw, threadId: m.threadId } : { raw }) });
+  // Gmail can rewrite Message-ID; read back the real one so follow-ups thread for the recipient too.
+  let real = messageId;
+  try { const meta = await gmail(sender, `messages/${sent.id}?format=metadata&metadataHeaders=Message-ID`); real = (meta.payload?.headers || []).find(x => /^message-id$/i.test(x.name))?.value || messageId; } catch {}
+  return { gmailId: sent.id, threadId: sent.threadId, messageIdHeader: real };
+}
+
+// ---------------------------------------------------------------- Send
+VIEWS.send = async () => {
+  const p = product();
+  const mine = S.senders.filter(s => s.product_id === p.id);
+  const q = await api('queue.list', { productId: p.id });
+  const approved = q.messages.filter(m => m.status === 'approved').length;
+  $('#view').innerHTML = `
+    ${p.paused ? `<div class="note bad"><b>Paused.</b> ${esc(p.paused_reason || '')}</div>` : ''}
+    <div class="card">
+      <h2>${approved} approved email${approved === 1 ? '' : 's'} waiting</h2>
+      <p class="sub">Inboxes set to send <b>on their own</b> need nothing from you: the server spreads each day's cap across US business hours. Inboxes set to send <b>from this browser</b> send one email every 1 to 3 minutes while this tab is open.</p>
+      ${mine.length ? `<table>${mine.map(s => `<tr data-e="${esc(s.email)}">
+        <td><b>${esc(s.email)}</b>${s.segment ? ` <span class="pill">${esc(s.segment)} only</span>` : ''}<br><span class="muted small" data-st>${tokenFor(s.email) ? 'Connected' : 'Not connected'}</span></td>
+        <td class="num">cap ${s.daily_cap}/day</td>
+        <td class="num" style="white-space:nowrap">${s.mode !== 'browser' ? '<span class="pill good">Sends on its own</span>' : `<button class="btn small" data-a="connect">${tokenFor(s.email) ? 'Reconnect' : 'Connect'}</button>
+          <button class="btn small primary" data-a="start" ${S.sending[s.email] ? 'disabled' : ''}>Start sending</button>
+          <button class="btn small ${S.sending[s.email] ? '' : 'hide'}" data-a="stop">Stop</button>`}</td></tr>`).join('')}</table>`
+        : `<div class="note warn">No sending inbox for ${esc(p.name)} yet. Add one in <a href="#" data-go="settings">Settings</a>.</div>`}
+      <div id="sLog" class="log" style="margin-top:12px">${esc(S.sendLog || 'Nothing sent this session.')}</div>
+    </div>`;
+  wireGo();
+  $('#view').querySelectorAll('tr[data-e] button').forEach(b => b.onclick = async () => {
+    const email = b.closest('tr').dataset.e;
+    if (b.dataset.a === 'connect') { try { await connectInbox(email); toast('Connected ' + email); go('send'); } catch (e) { toast(e.message, 6000); } }
+    if (b.dataset.a === 'start') { if (!tokenFor(email)) { try { await connectInbox(email); } catch (e) { return toast(e.message, 6000); } } runSender(email); go('send'); }
+    if (b.dataset.a === 'stop') { S.sending[email] = false; go('send'); }
+  });
+};
+function slog(line) { S.sendLog = (S.sendLog || '') + `${new Date().toLocaleTimeString()}  ${line}\n`; const el = $('#sLog'); if (el) { el.textContent = S.sendLog; el.scrollTop = el.scrollHeight; } }
+async function runSender(email) {
+  if (S.sending[email]) return; S.sending[email] = true; slog(`${email}: started`);
+  while (S.sending[email]) {
+    let next;
+    try { next = await api('send.next', { sender: email }); } catch (e) { slog(`${email}: ${e.message}`); break; }
+    if (next.stop) { slog(`${email}: ${next.reason}`); break; }
+    const m = next.message;
+    if (!tokenFor(email)) { slog(`${email}: Google sign-in expired. Press Connect, then Start again.`); break; }
+    try {
+      const r = await sendViaGmail(email, m);
+      await api('send.done', { messageId: m.id, sender: email, ...r });
+      slog(`${email}: sent to ${m.prospect} <${m.to}> (${next.sentToday + 1}/${next.cap} today)`);
+    } catch (e) {
+      slog(`${email}: failed for ${m.to}: ${e.message}`);
+      await api('send.failed', { messageId: m.id, error: e.message }).catch(() => {});
+      if (/reconnect|invalid credentials|401/i.test(e.message)) break;
+    }
+    refreshBadges();
+    const gap = window.CE_TEST_GAP ?? (60000 + Math.random() * 120000);
+    slog(`${email}: next in ${Math.round(gap / 1000)}s`);
+    const until = Date.now() + gap;
+    while (S.sending[email] && Date.now() < until) await sleep(1000);
+  }
+  S.sending[email] = false; slog(`${email}: stopped`);
+  if (S.view === 'send') go('send');
+}
+window.addEventListener('beforeunload', e => { if (Object.values(S.sending).some(Boolean)) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------------------------------------------------------------- Replies
+function bodyText(payload) {
+  const dec = d => { try { return decodeURIComponent(escape(atob(d.replace(/-/g, '+').replace(/_/g, '/')))); } catch { return ''; } };
+  const walk = part => {
+    if (!part) return '';
+    if (part.mimeType === 'text/plain' && part.body?.data) return dec(part.body.data);
+    for (const c of part.parts || []) { const t = walk(c); if (t) return t; }
+    if (part.mimeType === 'text/html' && part.body?.data) return dec(part.body.data).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ');
+    return '';
+  };
+  return walk(payload);
+}
+const stripQuoted = t => t.split(/\r?\n(On .{5,200}wrote:|-{2,} ?Original Message|From: .+\r?\nSent: )/)[0].split('\n').filter(l => !l.startsWith('>')).join('\n').trim();
+const header = (msg, name) => (msg.payload?.headers || []).find(h => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+async function checkReplies(log) {
+  let found = 0;
+  for (const s of S.senders.filter(x => x.mode === 'browser')) {
+    if (!tokenFor(s.email)) { log(`${s.email}: not connected, skipped`); continue; }
+    const w = await api('replies.watch', { sender: s.email });
+    const known = new Set(w.knownIds);
+    log(`${s.email}: checking ${w.threads.length} conversations`);
+    for (const t of w.threads) {
+      let thread;
+      try { thread = await gmail(s.email, `threads/${t.thread_id}?format=full`); } catch (e) { log(`  ${t.name}: ${e.message}`); continue; }
+      for (const msg of thread.messages || []) {
+        if (known.has(msg.id)) continue;
+        const from = header(msg, 'From');
+        if (from.toLowerCase().includes(s.email)) continue; // ours
+        const r = await api('replies.add', { prospectId: t.id, gmailId: msg.id, from, subject: header(msg, 'Subject'), body: stripQuoted(bodyText(msg.payload)) || msg.snippet || '', date: Number(msg.internalDate) || null });
+        if (!r.duplicate) { found++; log(`  ${t.name}: ${r.reply.label}${r.brake ? '. SENDING PAUSED: ' + r.brake : ''}`); }
+      }
+    }
+  }
+  return found;
+}
+
+const LABELS = { interested: ['Interested', 'good'], question: ['Question', 'good'], not_now: ['Not now', ''], unsubscribe: ['Opted out', 'warn'], wrong_person: ['Wrong person', ''], bounce: ['Bounced', 'bad'], auto_reply: ['Auto-reply', ''], angry: ['Complaint', 'bad'] };
+VIEWS.replies = async () => {
+  const p = product();
+  const all = store.get('rall', false);
+  const r = await api('replies.list', { productId: p.id, all });
+  $('#view').innerHTML = `
+    <div class="card"><div class="row"><div class="grow-text" style="flex:1"><h2>Check for replies</h2><p class="sub" style="margin:0">Replies are checked on their own every 10 minutes, and you get an email for anyone interested. Opt-outs and bounces go on the do-not-contact list automatically.</p></div>
+      <button class="btn primary" id="rCheck">Check now</button></div><div id="rLog" class="log hide" style="margin-top:10px"></div></div>
+    <div class="row" style="margin-bottom:10px"><label style="margin:0;display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" id="rAll" style="width:auto" ${all ? 'checked' : ''}> Show answered ones too</label></div>
+    ${r.replies.length ? r.replies.map(x => `<div class="card" data-id="${x.id}">
+      <div class="row"><b style="flex:1">${esc(x.prospect?.name || x.from_addr)}</b><span class="pill ${LABELS[x.label]?.[1] || ''}">${LABELS[x.label]?.[0] || esc(x.label)}</span><span class="muted small">${fmtTime(x.received_at)}</span></div>
+      <p class="small muted" style="margin:2px 0 8px">${esc(x.from_addr)}</p>
+      <div style="white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:10px">${esc(x.body)}</div>
+      ${x.handled ? (x.answer ? `<p class="small muted">Answered: ${esc(x.answer)}</p>` : '') : `
+        ${['interested', 'question', 'wrong_person'].includes(x.label) ? `<label>Your answer <small>drafted for you, edit freely</small></label><textarea class="mail" data-f="answer">${esc(x.answer || '')}</textarea>` : ''}
+        <div class="row" style="margin-top:10px">
+          ${['interested', 'question', 'wrong_person'].includes(x.label) ? `<button class="btn primary" data-a="send">Send answer</button>` : ''}
+          <button class="btn" data-a="done">Done</button>
+          <button class="btn" data-a="won">They bought</button>
+          ${x.label !== 'unsubscribe' ? `<button class="btn danger" data-a="block">Don't email again</button>` : ''}
+        </div>`}
+    </div>`).join('') : '<div class="card empty">No replies waiting.</div>'}`;
+  $('#rAll').onchange = e => { store.set('rall', e.target.checked); go('replies'); };
+  $('#rCheck').onclick = async () => {
+    const log = $('#rLog'); log.classList.remove('hide'); log.textContent = '';
+    const L = s => { log.textContent += s + '\n'; log.scrollTop = log.scrollHeight; };
+    $('#rCheck').disabled = true;
+    try {
+      const srv = await api('autopilot.replies'); (srv.log || []).forEach(L);
+      const n = (srv.log || []).length + (S.senders.some(x => x.mode === 'browser') ? await checkReplies(L) : 0);
+      L(`${n} new repl${n === 1 ? 'y' : 'ies'}.`); if (n) setTimeout(() => go('replies'), 900);
+    }
+    catch (e) { L('Error: ' + e.message); }
+    $('#rCheck').disabled = false; await reloadProducts(); refreshBadges();
+  };
+  $('#view').querySelectorAll('.card[data-id] button[data-a]').forEach(b => b.onclick = async () => {
+    const card = b.closest('.card'), x = r.replies.find(y => y.id === card.dataset.id), a = b.dataset.a;
+    b.disabled = true;
+    try {
+      if (a === 'send') {
+        const answer = card.querySelector('[data-f=answer]').value.trim(); if (!answer) throw new Error('Write an answer first.');
+        const sender = x.prospect?.sender;
+        if (!sender) throw new Error('No sending inbox recorded for this person.');
+        if ((S.senders.find(z => z.email === sender) || {}).mode !== 'browser') {
+          await api('reply.send', { id: x.id, answer }); toast('Sent.'); go('replies'); refreshBadges(); return;
+        }
+        if (!tokenFor(sender)) await connectInbox(sender);
+        const meta = await gmail(sender, `messages/${x.gmail_id}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=Subject`);
+        const subj = header(meta, 'Subject') || x.subject || '';
+        const prod = S.products.find(pp => pp.id === x.product_id) || p;
+        await sendViaGmail(sender, { to: x.prospect.email, subject: /^re:/i.test(subj) ? subj : 'Re: ' + subj, body: answer + `\n\n${prod.from_name}`, inReplyTo: header(meta, 'Message-ID'), threadId: meta.threadId, fromName: prod.from_name });
+        await api('reply.done', { id: x.id, answer });
+        toast('Sent.');
+      }
+      if (a === 'done') await api('reply.done', { id: x.id });
+      if (a === 'won') { await api('prospect.won', { id: x.prospect_id }); await api('reply.done', { id: x.id }); toast('Marked as a customer.'); }
+      if (a === 'block') { await api('suppress.add', { email: x.prospect?.email || x.from_addr, reason: 'blocked by you' }); await api('reply.done', { id: x.id }); }
+      go('replies'); refreshBadges();
+    } catch (e) { toast(e.message, 6000); b.disabled = false; }
+  });
+};
+
+// ---------------------------------------------------------------- Results
+VIEWS.results = async () => {
+  const p = product();
+  const st = await api('stats', { productId: p.id });
+  const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '';
+  const tbl = (title, g, note) => `<div class="card"><h2>${title}</h2>${note ? `<p class="sub">${note}</p>` : ''}
+    ${Object.keys(g).length ? `<table><tr><th></th><th class="num">People</th><th class="num">Replied</th><th class="num">Interested</th><th class="num">Bought</th><th class="num">Bounced</th></tr>
+    ${Object.entries(g).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.people}</td><td class="num">${v.replied} <span class="muted">${pct(v.replied, v.people)}</span></td><td class="num">${v.positive} <span class="muted">${pct(v.positive, v.people)}</span></td><td class="num">${v.won}</td><td class="num">${v.bounced} <span class="muted">${pct(v.bounced, v.people)}</span></td></tr>`).join('')}</table>` : '<p class="muted">Nothing sent yet.</p>'}</div>`;
+  const angleName = id => (p.angles || []).find(a => a.id === id)?.name || id;
+  const byAngle = Object.fromEntries(Object.entries(st.byAngle).map(([k, v]) => [angleName(k), v]));
+  const t = st.totals;
+  const bounce = t.people ? t.bounced / t.people : 0;
+  $('#view').innerHTML = `
+    <div class="grid3">
+      <div class="stat"><b>${t.people || 0}</b><span>people emailed</span></div>
+      <div class="stat"><b>${pct(t.positive || 0, t.people) || '0%'}</b><span>interested or asking (aim: 2%+)</span></div>
+      <div class="stat"><b>${t.won || 0}</b><span>customers</span></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h2>Health</h2><table>
+      <tr><td>Bounce rate</td><td class="num">${pct(t.bounced || 0, t.people) || '0%'}</td><td>${bounce > 0.03 ? '<span class="pill bad">Over 3%: sending pauses</span>' : '<span class="pill good">Healthy</span>'}</td></tr>
+      <tr><td>Your edits to recent first emails</td><td class="num">${st.editRate == null ? '' : st.editRate + '%'}</td><td class="small muted">When this stays under about 10%, the writer has learned your voice.</td></tr>
+    </table></div>
+    ${tbl('By angle', byAngle, 'Every angle gets about 100 sends before the learner shifts toward the winner.')}
+    ${tbl('By segment', st.bySegment)}
+    ${tbl('By score', st.byScore, 'If high scores don\'t reply more than low ones, the scoring needs adjusting.')}`;
+};
+
+// ---------------------------------------------------------------- Products
+VIEWS.products = async () => {
+  const p = product();
+  const f = (k, l, help, rows) => `<label>${l} <small>${help || ''}</small></label><textarea data-k="${k}" style="min-height:${rows || 80}px">${esc(p[k] || '')}</textarea>`;
+  $('#view').innerHTML = `
+    ${p.paused ? `<div class="note bad"><b>Paused.</b> ${esc(p.paused_reason || '')} <button class="btn small" id="resume">Resume sending</button></div>` : ''}
+    <div class="card">
+      <h2>${esc(p.name)} product file</h2>
+      <p class="sub">The writer may only say what's written here. Keep it true; never add a customer count or testimonial you can't show.</p>
+      <div class="grid2">
+        <div><label>Your name on emails</label><input data-k="from_name" value="${esc(p.from_name || '')}" placeholder="Raghav Shaligram"></div>
+        <div><label>Postal address <small>required in every email (CAN-SPAM)</small></label><input data-k="postal_address" value="${esc(p.postal_address || '')}" placeholder="PO Box 123, City, ST 00000"></div>
+      </div>
+      <div class="grid2"><div><label>Website</label><input data-k="site" value="${esc(p.site || '')}"></div><div><label>Price</label><input data-k="price" value="${esc(p.price || '')}"></div></div>
+      ${f('buyer', 'Who buys')}
+      ${f('pains', 'Their pains', 'one per line', 100)}
+      ${f('proof', 'What is true about the product', 'the only claims allowed, one per line', 120)}
+      ${f('offer', 'The offer')}
+      ${f('never_say', 'Never say', 'one rule per line', 100)}
+    </div>
+    <div class="card">
+      <h2>Angles, segments and rules</h2>
+      <p class="sub">Advanced. Angles are the hooks the learner tests; segments set the ask and landing page; rules set the sequence.</p>
+      <label>Angles</label><textarea class="mono" data-j="angles" style="min-height:140px">${esc(JSON.stringify(p.angles, null, 2))}</textarea>
+      <label>Segments</label><textarea class="mono" data-j="segments" style="min-height:140px">${esc(JSON.stringify(p.segments, null, 2))}</textarea>
+      <label>Rules <small>steps; gaps in days from the first email; word and link limits per email; minimum score</small></label><textarea class="mono" data-j="rules" style="min-height:140px">${esc(JSON.stringify(p.rules, null, 2))}</textarea>
+    </div>
+    <div class="row"><button class="btn primary" id="pSave">Save ${esc(p.name)}</button><span id="pMsg" class="muted small"></span></div>`;
+  const rb = $('#resume'); if (rb) rb.onclick = async () => { await api('products.resume', { id: p.id }); await reloadProducts(); go('products'); };
+  $('#pSave').onclick = async () => {
+    const out = { id: p.id };
+    try {
+      $('#view').querySelectorAll('[data-k]').forEach(el => out[el.dataset.k] = el.value.trim());
+      $('#view').querySelectorAll('[data-j]').forEach(el => { try { out[el.dataset.j] = JSON.parse(el.value); } catch { throw new Error(`${el.dataset.j} isn't valid JSON`); } });
+      await api('products.save', { product: out });
+      await reloadProducts(); toast('Saved.');
+    } catch (e) { toast(e.message); }
+  };
+};
+
+// ---------------------------------------------------------------- Settings
+VIEWS.settings = async () => {
+  const s = S.setup;
+  const [sup, ss] = await Promise.all([api('suppress.list'), api('senders.status')]);
+  S.senders = ss.senders;
+  const envRow = (k, help) => `<tr><td><code>${k}</code></td><td>${s.env?.[k] ? '<span class="pill good">Set</span>' : '<span class="pill bad">Missing</span>'}</td><td class="small muted">${help}</td></tr>`;
+  const rows = S.senders.length ? S.senders : [{ email: '', product_id: S.product, segment: '', daily_cap: 10 }];
+  $('#view').innerHTML = `
+    ${s.dbError ? `<div class="note bad">${esc(s.dbError)}</div>` : ''}
+    <div class="card"><h2>Sending inboxes</h2>
+      <p class="sub">Google Workspace inboxes on your separate sending domains (never pdfmacro.com, keephoa.com or ringsparrow.com). Each belongs to one product, and optionally one segment. New inboxes warm up on their own for 14 days (they need a partner inbox on another domain), then cold email starts at 5 a day and rises by 2 every 3 days up to the maximum you set. 25 is a safe maximum.</p>
+      <table id="sTbl"><tr><th>Inbox</th><th>Product</th><th>Segment</th><th>Sends</th><th class="num">Max a day</th><th></th></tr>
+        ${rows.map(r => senderRow(r)).join('')}</table>
+      <div class="row" style="margin-top:10px"><button class="btn" id="sAdd">Add inbox</button><button class="btn primary" id="sSave">Save inboxes</button></div>
+    </div>
+    <div class="card"><h2>Sending domains</h2>
+      <p class="sub">Each domain needs four DNS records before warm-up starts. Check them here; anything missing comes with the exact record to add.</p>
+      ${[...new Set(S.senders.map(x => x.email.split('@')[1]))].map(d => `<div class="row" style="margin-bottom:6px"><b style="flex:1">${esc(d)}</b><button class="btn small" data-dns="${esc(d)}">Check DNS</button></div><div id="dns-${esc(d).replace(/\./g, '-')}"></div>`).join('') || '<p class="muted">Add an inbox above first.</p>'}
+    </div>
+    <div class="card"><h2>Do-not-contact list</h2>
+      <p class="sub">Shared by every product, for ever. Opt-outs, bounces and complaints land here on their own.</p>
+      <div class="row"><input id="supIn" placeholder="name@example.com" style="flex:1"><button class="btn" id="supAdd">Add</button></div>
+      <p class="small muted">${sup.rows.length} address${sup.rows.length === 1 ? '' : 'es'}.</p>
+      ${sup.rows.length ? `<details><summary class="small">Show</summary><table>${sup.rows.map(r => `<tr><td class="small">${esc(r.email)}</td><td class="small muted">${esc(r.reason)}</td><td class="small muted">${fmtDate(r.created_at)}</td></tr>`).join('')}</table></details>` : ''}
+    </div>
+    <div class="card"><h2>Setup check</h2>
+      <table>
+        ${envRow('APP_KEY', 'The password for this app')}
+        ${envRow('SUPABASE_URL', 'Supabase > Project settings > API > Project URL')}
+        ${envRow('SUPABASE_SERVICE_KEY', 'Supabase > Project settings > API > service_role key (secret)')}
+        ${envRow('OPENAI_API_KEY', 'Writes and checks the emails. Model: ' + esc(s.model || ''))}
+        ${envRow('GOOGLE_SA_EMAIL', 'Service account that sends on its own from your Workspace inboxes')}
+        ${envRow('GOOGLE_SA_KEY', "That service account's private key")}
+        ${envRow('DIGEST_TO', 'Your own address, for the 9am summary and hot-lead alerts')}
+        ${envRow('PURCHASE_SECRET', 'Lets your products report purchases, so buyers are marked as customers')}
+        ${envRow('GOOGLE_CLIENT_ID', 'Optional: only for inboxes set to send from this browser')}
+        <tr><td>Database</td><td>${s.dbError ? '<span class="pill bad">Not ready</span>' : '<span class="pill good">Ready</span>'}</td><td class="small muted">Run schema.sql once in the Supabase SQL Editor</td></tr>
+      </table>
+      <div class="row" style="margin-top:12px"><button class="btn" id="theme">Theme: ${store.get('theme', 'auto')}</button><button class="btn" id="signout">Forget app key on this browser</button></div>
+    </div>`;
+  function senderRow(r) {
+    const segs = (S.products.find(p => p.id === r.product_id)?.segments || []);
+    const pl = r.plan, w = r.warmup;
+    const status = !pl ? `<label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:6px 0 0"><input type="checkbox" data-f="warmed" style="width:auto"> Already warmed elsewhere</label>`
+      : `<div class="small muted" style="margin-top:4px">${pl.warming ? `<span class="pill warn">Warming up</span> day ${pl.day + 1} of 14, cold emails from ${fmtDate(pl.coldFrom)}` : `<span class="pill good">Sending</span> up to ${pl.coldCap} cold emails today`}${w ? ` · warm-up: ${w.sent} sent, ${w.replied} replied, ${w.spam} rescued from spam` : ''}</div>`;
+    return `<tr data-s><td><input data-f="email" value="${esc(r.email)}" placeholder="you@getpdfmacro.com">${status}</td>
+      <td><select data-f="product_id">${S.products.map(p => `<option value="${p.id}" ${p.id === r.product_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></td>
+      <td><select data-f="segment"><option value="">Any</option>${segs.map(sg => `<option value="${sg.id}" ${sg.id === r.segment ? 'selected' : ''}>${esc(sg.name)}</option>`).join('')}</select></td>
+      <td><select data-f="mode"><option value="server" ${r.mode !== 'browser' ? 'selected' : ''}>On its own</option><option value="browser" ${r.mode === 'browser' ? 'selected' : ''}>From this browser</option></select></td>
+      <td><input data-f="daily_cap" type="number" min="1" max="50" value="${r.daily_cap}" style="width:80px"></td>
+      <td><button class="btn small danger" data-del>Remove</button></td></tr>`;
+  }
+  const wireRows = () => $('#sTbl').querySelectorAll('tr[data-s]').forEach(tr => {
+    tr.querySelector('[data-del]').onclick = () => tr.remove();
+    tr.querySelector('[data-f=product_id]').onchange = e => { const tmp = document.createElement('tbody'); tmp.innerHTML = senderRow({ email: tr.querySelector('[data-f=email]').value, product_id: e.target.value, segment: '', daily_cap: tr.querySelector('[data-f=daily_cap]').value, mode: tr.querySelector('[data-f=mode]').value }); const n = tmp.firstElementChild; tr.replaceWith(n); wireRows(); };
+  });
+  wireRows();
+  $('#sAdd').onclick = () => { $('#sTbl').insertAdjacentHTML('beforeend', senderRow({ email: '', product_id: S.product, segment: '', daily_cap: 10 })); wireRows(); };
+  $('#sSave').onclick = async () => {
+    const list = [...$('#sTbl').querySelectorAll('tr[data-s]')].map(tr => Object.fromEntries([...tr.querySelectorAll('[data-f]')].map(el => [el.dataset.f, el.type === 'checkbox' ? el.checked : el.value.trim()]))).filter(r => r.email);
+    const bad = list.find(r => /@(pdfmacro|keephoa|ringsparrow)\.com$/i.test(r.email));
+    if (bad) return toast(`Don't cold-email from ${bad.email.split('@')[1]}: use a separate sending domain.`, 6000);
+    try { const r = await api('senders.save', { list }); S.senders = r.senders; toast('Saved.'); go('settings'); } catch (e) { toast(e.message); }
+  };
+  $('#view').querySelectorAll('[data-dns]').forEach(b => b.onclick = async () => {
+    const d = b.dataset.dns, out = $('#dns-' + d.replace(/\./g, '-'));
+    b.disabled = true; out.innerHTML = '<p class="muted small">Checking…</p>';
+    try {
+      const r = await api('dns.check', { domain: d });
+      out.innerHTML = `<table style="margin-bottom:12px">${r.checks.map(c => `<tr><td><b>${c.record}</b></td><td>${c.ok ? '<span class="pill good">OK</span>' : '<span class="pill bad">Missing</span>'}</td><td class="small">${c.ok ? esc(c.found) : esc(c.fix)}</td></tr>`).join('')}</table>`;
+    } catch (e) { out.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
+    b.disabled = false;
+  });
+  $('#supAdd').onclick = async () => { const e = $('#supIn').value.trim(); if (!e) return; await api('suppress.add', { email: e, reason: 'added by you' }); go('settings'); };
+  $('#theme').onclick = () => { const order = ['auto', 'light', 'dark']; const t = order[(order.indexOf(store.get('theme', 'auto')) + 1) % 3]; store.set('theme', t); applyTheme(); go('settings'); };
+  $('#signout').onclick = () => { store.set('key', ''); KEY = ''; showGate(); };
+};
+
+function applyTheme() { const t = store.get('theme', 'auto'); if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t; }
+applyTheme();
+boot();
+</script>
+</body>
+</html>

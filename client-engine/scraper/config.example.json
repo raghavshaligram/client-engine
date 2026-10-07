@@ -1,0 +1,5 @@
+{
+  "site": "https://YOUR-SITE.netlify.app",
+  "appKey": "the same APP_KEY you set in Netlify",
+  "maxSearches": 6
+}

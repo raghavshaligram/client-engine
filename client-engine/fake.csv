@@ -1,0 +1,4 @@
+input_id,link,title,category,address,open_hours,popular_times,website,phone,plus_code,review_count,review_rating,reviews_per_rating,latitude,longitude,cid,status,descriptions,reviews_link,thumbnail,timezone,price_range,data_id,images,reservations,order_online,menu,owner,complete_address,about,user_reviews,user_reviews_extended,emails
+1,https://maps/a,Lone Star Plumbing,Plumber,"12 Elm St, Austin, TX 78701, United States",{},{},https://lonestarplumbing.com,(512) 555-0199,X,88,4.8,{},30.2,-97.7,1,,"Family owned
+since 1990, ""honest"" work",,,America/Chicago,,d,[],,,,{},"{""city"":""Austin"",""state"":""TX"",""country"":""US""}",[],[],[],"mike@lonestarplumbing.com"
+2,https://maps/b,Señor Rooter,Plumber,"3 Oak, Dallas, TX 75201, United States",{},{},https://senorrooter.com,(214) 555-0100,X,12,4.1,{},32.7,-96.8,2,,,,,America/Chicago,,d,[],,,,{},,[],[],[],"info@senorrooter.com, logo@2x.png"
