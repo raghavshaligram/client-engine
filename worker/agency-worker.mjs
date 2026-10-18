@@ -166,7 +166,8 @@ export async function validate(siteDir, job) {
     if (!/<meta[^>]+name=["']viewport/i.test(h)) problems.push(`${r}: missing viewport meta tag`);
     if (!/<meta[^>]+name=["']description["'][^>]+content=["'][^"']{30,}/i.test(h) && !/404/.test(r)) problems.push(`${r}: missing meta description`);
     if (/lorem ipsum|\{\{|\bTODO\b|\[(your|insert|add|placeholder)[^\]]*\]|example\.com|555-0100/i.test(h)) problems.push(`${r}: placeholder text left in`);
-    if (/[\u2014\u2013]|&mdash;|&ndash;/.test(h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ''))) problems.push(`${r}: em or en dash in the copy`);
+    // Em dashes read as machine-written; en dashes in ranges (Mon–Fri, 7am–6pm, 2019–2024) are correct typography.
+    if (/\u2014|&mdash;|[^\w\s>]\s*\u2013|\s\u2013\s/.test(h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ''))) problems.push(`${r}: em dash (or a spaced en dash used as one) in the copy`);
     for (const m of h.matchAll(/\b(?:href|src)=["']([^"'#?]+)/gi)) {
       const u = m[1];
       if (/^(https?:|mailto:|tel:|data:|\/\/|javascript:)/i.test(u)) {
