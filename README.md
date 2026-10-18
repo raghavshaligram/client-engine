@@ -1,6 +1,6 @@
 # Client Engine
 
-Finds prospects for PDFMacro, KeepHOA and RingSparrow, reads their websites, writes one checked email at a time, sends from your Google Workspace inboxes, follows up, reads replies and learns which angle wins. Once set up it runs on its own: you answer interested replies and read a 9am summary.
+Finds prospects for PDFMacro, KeepHOA, RingSparrow and the Website Studio agency, reads their websites, writes one checked email at a time, sends from your Google Workspace inboxes, follows up, reads replies and learns which angle wins. Once set up it runs on its own: you answer interested replies and read a 9am summary.
 
 ## How the autopilot runs
 
@@ -118,8 +118,64 @@ The scraper is [gosom/google-maps-scraper](https://github.com/gosom/google-maps-
 - EU/UK addresses, chains and franchises, no-reply and placeholder addresses are dropped on import. RingSparrow also requires an email on the business's own domain.
 - RingSparrow emails carry no tracking. KeepHOA links carry a `utm_campaign` tag per state, as in its plan.
 
+## Agency mode: Website Studio
+
+A fourth "product" that sells and delivers websites to US local businesses, on its own. It uses the same finding, writing, sending and reply-reading as the products above, then carries each deal all the way to a live site.
+
+### What happens without you
+
+| Step | How |
+|---|---|
+| Find | The nightly scraper, with searches you add for **Website Studio** on Find people (for example "roofing contractor", "plumber", "dentist" in mid-sized US cities). |
+| Audit | Each site is read once (HTTPS, mobile layout, copyright year, old builder, missing basics), then Google PageSpeed (mobile) and, if DataForSEO is set up, real monthly searches for their service in their city. Only sites with real problems and healthy businesses get emails. |
+| Cold email | Names one or two measured problems, offers a free home page mockup. No link, no price. Autopilot is on: drafts the checker scores 8+ send themselves. |
+| Reply | The closer AI answers in the same Gmail thread, 4 to 14 minutes later, 7am to 9pm US Central. A "yes" makes the mockup (from their real details) and sends its link. Questions get answers from the product file and FAQ only. Price questions get the offer page with checkout. |
+| Guardrails | Every answer is checked twice (rules in code, then an AI editor). Invented prices, raw links, promises, discounts, custom work, calls, complaints or anything unsure go to you instead, by email. After 10 AI messages without a sale it hands the conversation to you. "No" means suppressed for ever. |
+| Payment | Dodo Payments checkout. The webhook starts the project: thank-you email with the details form. |
+| Details form | Prefilled from what we know. Uploads go to private storage. Reminder after 2 days; after 5 days it builds from what it has. |
+| Build | The worker on your computer runs Claude Code with file tools only (no shell, no web), following `worker/template/GUIDE.md`, then checks the result, deploys to Cloudflare Pages and backs up the source. |
+| Checks | PageSpeed on the preview: 80+ performance, 90+ SEO, 85+ accessibility, or it goes back for up to 2 automatic fixes. |
+| Your OK | The first 3 sites wait for your "Send to client" on the Agency screen. After that they go straight to the client. |
+| Review | The client approves or lists changes on their review page (2 rounds included; more comes to you). |
+| Live | On approval Cloudflare gets their domain and they get exact DNS steps for their DNS provider. Checked every couple of hours, with reminders. Live email includes the Growth offer. |
+| Growth | $149/month subscription: one article a week (keywords from DataForSEO), small edits by email done automatically, a report on the 1st of each month. |
+| Enquiries | Contact forms on client sites post to this app, which emails the client (Reply-To set to the customer). |
+
+### Setup
+
+1. **Database:** run `schema.sql` again in Supabase (it only adds what's missing, including a private storage bucket).
+2. **Products > Website Studio:** your name and postal address. Rename it to your studio's name. The FAQ the AI answers from is in Rules > `agency.faq`.
+3. **Sending inboxes:** use separate domains for the agency (not the PDFMacro/RingSparrow ones), on the same Google Workspace, assigned to Website Studio in Settings. Warm-up applies as usual.
+4. **Google PageSpeed key:** Google Cloud console (same project) > APIs & Services > enable **PageSpeed Insights API** > Credentials > API key. Set `PSI_API_KEY` in Netlify.
+5. **Dodo Payments:** create a one-time product (Website, $497) and a subscription product (Growth, $149/month). Paste both product IDs on the Agency screen. Add a webhook to `https://<your app>/hooks/dodo` for payment and subscription events, and set its secret as `DODO_WEBHOOK_SECRET`. While testing, set `DODO_MODE=test` and use test-mode products.
+6. **Cloudflare:** a free account. Create an API token with **Cloudflare Pages: Edit**. Set `CF_ACCOUNT_ID` and `CF_API_TOKEN` in Netlify, and put the same two in the worker's `config.json`.
+7. **Your public address:** clients see links like `/m/...` and `/start/...`. Point a subdomain of your studio's domain (for example `hello.yourstudio.com`) at this Netlify site and set `PUBLIC_URL` to it. Without it, the Netlify address is used.
+8. **DataForSEO (optional, recommended):** set `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD`. Adds search volumes to cold emails and picks Growth article topics. Cached, so each city and service is paid for once.
+9. **The build worker (on the same computer as the scraper):**
+   - Install Node.js LTS and Claude Code (`npm install -g @anthropic-ai/claude-code`), then run `claude` once and sign in. Builds use your Claude plan.
+   - In `worker/`, copy `config.example.json` to `config.json` and fill it in.
+   - Run `node agency-worker.mjs --check`, then right-click `install-worker.ps1` > Run with PowerShell. It checks for jobs every 10 minutes.
+   - Mac or Linux: `crontab -e` and add `*/10 * * * * cd /path/to/worker && node agency-worker.mjs`.
+   - Sites are kept in `worker/sites` and backed up to Supabase after every deploy, so another computer can pick up where this one left off.
+
+### Netlify variables for agency mode
+
+| Name | Value |
+|---|---|
+| `PSI_API_KEY` | Google PageSpeed Insights API key |
+| `DODO_WEBHOOK_SECRET` | From the Dodo webhook (starts with `whsec_`) |
+| `DODO_MODE` | `test` while testing; remove for live |
+| `CF_ACCOUNT_ID`, `CF_API_TOKEN` | Cloudflare account ID and a Pages: Edit token |
+| `PUBLIC_URL` | Optional: the address clients see, e.g. `https://hello.yourstudio.com` |
+| `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | Optional |
+
+### Your part
+- The Agency screen and your 9am email show conversations the AI handed you and sites waiting for your OK. Answer in the app; it goes out in their thread. "Hand back to the AI" lets it carry on.
+- Keep the computer with the worker on during the day. If builds wait more than 2 hours, the Agency screen says so.
+
 ## Tests
 ```
-node --test test/flow.test.mjs test/autopilot.test.mjs   # server, including the autopilot, Workspace sending and digest
+node --test test/flow.test.mjs test/autopilot.test.mjs test/agency.test.mjs test/worker.test.mjs
+python3 test/agency_shots.py /tmp/shots   # screenshots of the mockup, offer, form and review pages
 python3 test/browser_test.py /tmp     # clicks through the whole app with Google and Gmail mocked
 ```

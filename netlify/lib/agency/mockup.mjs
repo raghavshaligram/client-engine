@@ -119,7 +119,7 @@ nav.links{display:flex;gap:22px;font-weight:500;font-size:15px}nav.links a{text-
 .hero h1{font:${m.style === 'trades' ? '700 clamp(44px,7.4vw,84px)/0.95' : '600 clamp(38px,5.6vw,66px)/1.05'} var(--display);margin:0 0 18px;max-width:15ch;${m.style === 'trades' ? 'text-transform:uppercase;letter-spacing:.01em' : 'letter-spacing:-.015em'}}
 .hero p.sub{font-size:20px;max-width:46ch;margin:0 0 28px;opacity:.92}
 .hero .actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.bignum{display:block;font:700 clamp(40px,8vw,92px)/1 var(--display);color:var(--accent);text-decoration:none;margin:6px 0 26px;letter-spacing:.01em}
+.bignum{display:inline-block;font:700 clamp(40px,8vw,92px)/1 var(--display);text-decoration:none;margin:6px 0 26px;letter-spacing:.01em;${photo ? 'color:var(--accent)' : 'color:var(--ink);background:linear-gradient(transparent 64%,var(--accent) 64%,var(--accent) 90%,transparent 90%)'}}
 .trust{background:var(--band);color:var(--band-ink)}.trust .wrap{display:flex;flex-wrap:wrap;gap:12px 36px;padding:18px 20px;font-weight:500}
 .trust span{display:inline-flex;align-items:center;gap:8px}.trust svg{width:18px;height:18px;color:var(--accent)}
 section{padding:80px 0}h2{font:600 clamp(30px,3.6vw,42px)/1.15 var(--display);margin:0 0 12px;letter-spacing:-.01em}
@@ -155,7 +155,7 @@ footer{padding:44px 0 120px;color:var(--soft);font-size:15px}footer .wrap{displa
 ${trust ? `<div class="trust"><div class="wrap">${trust}</div></div>` : ''}
 ${m.services.length ? `<section id="services"><div class="wrap"><h2>What we do</h2><p class="lead">${esc(m.area || (where ? 'Serving ' + where + ' and nearby.' : ''))}</p>
   <div class="services">${m.services.map(s => `<div class="svc"><h3>${esc(s.name)}</h3><p>${esc(s.text)}</p></div>`).join('')}</div></div></section>` : ''}
-${m.why.length ? `<section style="background:var(--surface)"><div class="wrap"><h2>Why people choose ${esc(p.name)}</h2><p class="lead"></p>
+${m.why.length ? `<section style="background:var(--surface)"><div class="wrap"><h2 style="margin-bottom:32px">Why people choose ${esc(p.name)}</h2>
   <div class="why">${m.why.map(w => `<div><h3>${esc(w.title)}</h3><p>${esc(w.text)}</p></div>`).join('')}</div></div></section>` : ''}
 ${m.about ? `<section id="about"><div class="wrap about"><div><h2>About us</h2><p>${esc(m.about)}</p></div>${(a.images || []).length > 1 ? `<img src="${esc(a.images[1])}" alt="" loading="lazy" onerror="this.remove()">` : ''}</div></section>` : ''}
 <section class="cta" id="contact"><div class="wrap"><h2>${p.phone ? 'Talk to us today' : 'Get in touch'}</h2>

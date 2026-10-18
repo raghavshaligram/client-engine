@@ -47,7 +47,7 @@ export const agencyActions = {
     return { deal, prospect, convo, outbox, jobs, links: links(deal) };
   },
 
-  // You answer a conversation the AI handed to you. Goes out within a minute, in the thread.
+  // You answer a conversation the AI handed to you. Goes out on the next agency tick (within 5 minutes), in the thread.
   async 'agency.reply'({ id, text }) {
     const { deal, prospect } = await load(id);
     if (!String(text || '').trim()) throw new Error('Write a message first');

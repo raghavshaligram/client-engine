@@ -1,0 +1,8 @@
+{
+  "site": "https://YOUR-CLIENT-ENGINE.netlify.app",
+  "appKey": "the same APP_KEY you set in Netlify",
+  "cloudflareAccountId": "from the Cloudflare dashboard, right-hand side of any page",
+  "cloudflareApiToken": "a token with Cloudflare Pages: Edit",
+  "model": "",
+  "maxJobs": 2
+}

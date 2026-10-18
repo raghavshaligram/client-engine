@@ -99,6 +99,8 @@ export async function brief(deal, job) {
     `# Website brief: ${i.business_name || p.name}`,
     '',
     `Site id: ${deal.slug} (keep the <meta name="x-site-id" content="${deal.slug}"> tag on every page)`,
+    `Domain: ${(siteHost(i.domain || p.website) || {}).host || '(not known yet)'} (use https://<this> in canonical URLs and the sitemap)`,
+    `Studio name: ${product.name}`,
     `Contact form endpoint: ${L.form} (POST, fields: name, email, phone, message, page; hidden honeypot field "company" must stay empty)`,
     '',
     '## The business',
