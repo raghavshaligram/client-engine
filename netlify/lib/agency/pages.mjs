@@ -120,7 +120,10 @@ ${deal.intake_at ? '<div class="note">We have your details. You can update them 
 <label>Colors or brand guidelines<input type="text" name="colors" value="${v('colors')}"></label>
 <label>Websites you like the look of<input type="text" name="likes" value="${v('likes')}"></label>
 <label>Your domain <small>(where the site will live)</small><input type="text" name="domain" value="${v('domain', prospect.website || '')}"></label>
-<label>Logo and photos <small>(JPG, PNG, SVG or PDF, up to 10 files, 15 MB each)</small><input type="file" id="files" multiple accept="image/*,.pdf,.svg"></label>
+<label>Your photos <small>(the more real photos, the better your site looks)</small></label>
+<div class="note">Phone photos are perfect. We retouch every one (light, colour, straightening, tidying the background) without changing what's in it. The ones that work best:
+<ul style="margin:8px 0 0;padding-left:20px"><li>You and your team at work</li><li>Your vans or trucks</li><li>Finished jobs you're proud of</li><li>Your shop, office or premises, inside and out</li><li>Your logo (any file is fine)</li></ul></div>
+<input type="file" id="files" multiple accept="image/*,.pdf,.svg" aria-label="Choose photos to upload"><small style="color:var(--soft)">JPG, PNG, HEIC, SVG or PDF. Up to 20 files, 15 MB each.</small>
 <div class="files" id="fileList"></div>
 <label>Anything else?<textarea name="notes">${v('notes')}</textarea></label>
 <p style="margin-top:28px"><button class="btn" id="go" type="submit">Send my details</button></p>
@@ -129,7 +132,7 @@ ${deal.intake_at ? '<div class="note">We have your details. You can update them 
   const script = `
 const slug=${JSON.stringify(deal.slug)};const f=document.getElementById('f'),msg=document.getElementById('msg'),go=document.getElementById('go');
 const files=document.getElementById('files'),list=document.getElementById('fileList');let uploaded=[];
-files.onchange=async()=>{for(const file of [...files.files].slice(0,10)){if(file.size>15e6){list.insertAdjacentHTML('beforeend','<div>'+file.name+': too large (15 MB max)</div>');continue}
+files.onchange=async()=>{for(const file of [...files.files].slice(0,20)){if(file.size>15e6){list.insertAdjacentHTML('beforeend','<div>'+file.name+': too large (15 MB max)</div>');continue}
 const row=document.createElement('div');row.textContent=file.name+': uploading';list.append(row);
 try{const r=await fetch('/intake/'+slug+'/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,type:file.type,size:file.size})});const u=await r.json();if(!r.ok)throw new Error(u.error);
 const put=await fetch(u.url,{method:'PUT',headers:{'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},body:file});if(!put.ok)throw new Error('upload failed');uploaded.push(u.path);row.textContent=file.name+': uploaded'}catch(e){row.textContent=file.name+': '+e.message}}files.value=''};

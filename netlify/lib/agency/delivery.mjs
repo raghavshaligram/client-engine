@@ -36,7 +36,8 @@ export async function sitePaid(deal, { paymentId, amount, email }) {
   await queue({ deal, prospect, kind: 'intake', immediate: true, body:
 `Thank you, payment received. Here's what happens next.
 
-1. Fill in this short form so the site has your details right (about 10 minutes, and you can upload your logo and photos): {{INTAKE_LINK}}
+1. Fill in this short form so the site has your details right (about 10 minutes): {{INTAKE_LINK}}
+   Please add as many real photos as you can: you and your team, your vans, finished jobs, your shop. Phone photos are fine; we retouch them. Real photos make the biggest difference to how your site looks.
 2. We build your site. You'll get a link to review it in about ${conf(product).delivery_days} days.
 3. You ask for any changes, approve it, and we walk you through putting it on your domain.
 

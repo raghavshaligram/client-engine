@@ -116,3 +116,19 @@ test('IMAGES.json is cleaned: names, aspects, prompt length, budget', () => {
   assert.deepEqual(plan.map(p => [p.file, p.aspect]), [['hero-shot.webp', '16:9'], ['etc-x.webp', '1:1']]);
   assert.equal(readPlan(d, 8).find(p => p.file === 'b.webp').aspect, '16:9', 'unknown aspect falls back');
 });
+
+test('client photos are cleaned up through the image edit; logos are left alone', async () => {
+  const { enhanceUploads, ENHANCE_PROMPT } = await import('../worker/lib/images.mjs');
+  const work = fs.mkdtempSync(path.join(tmp, 'enh-'));
+  fs.mkdirSync(path.join(work, 'raw'), { recursive: true });
+  fs.writeFileSync(path.join(work, 'raw', 'upload-van.jpg'), Buffer.alloc(300, 3));
+  fs.writeFileSync(path.join(work, 'raw', 'upload-logo.png'), Buffer.alloc(300, 4));
+  const seen = [];
+  const r = await enhanceUploads({}, work, W.run, () => {}, { edit: async (bytes, name) => { seen.push(name); return Buffer.alloc(400, 9); } });
+  assert.deepEqual(seen, ['upload-van.jpg']);
+  assert.deepEqual(r.done, ['upload-van.webp']);
+  assert.ok(fs.existsSync(path.join(work, 'site/assets/img/upload-van.webp')));
+  assert.match(ENHANCE_PROMPT, /Do not add, remove or replace any person, object, logo, text or part of the work/);
+  const again = await enhanceUploads({}, work, W.run, () => {}, { edit: async () => { throw new Error('should be cached'); } });
+  assert.deepEqual(again.done, ['upload-van.webp'], 'each photo is edited once');
+});

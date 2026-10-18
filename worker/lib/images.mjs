@@ -93,3 +93,72 @@ export async function generateImages(cfg, work, run, log = () => {}, { max = 8, 
   }
   return { planned: plan.length, done, failed, provider: which };
 }
+
+// ---- The client's own photos: cleaned up, never changed in substance ------------------------------
+// Phone photos of their team, vans, shop and finished work go through an image edit that fixes light,
+// colour, straightness and background clutter while keeping every real thing in the picture as it is.
+export const ENHANCE_PROMPT = `Professionally retouch this real photograph for a small business website, like a skilled photo editor would.
+Do: correct exposure and white balance, recover shadows and highlights, reduce noise and blur, straighten verticals, improve sharpness, make colours natural and clean, tidy minor background clutter (stray rubbish, cables, cones) where it does not belong to the subject.
+Keep exactly as they are: every person and face, their clothing, uniforms and logos, every vehicle and its livery, signage and lettering, the building, the equipment and the work shown. Do not add, remove or replace any person, object, logo, text or part of the work. Do not change the scene, the season or the time of day. Same framing and composition. The result must still be an honest photo of the same moment.`;
+
+async function editOpenAI(cfg, bytes, name) {
+  const fd = new FormData();
+  fd.append('model', cfg.openaiImageModel || 'gpt-image-2');
+  fd.append('prompt', ENHANCE_PROMPT);
+  fd.append('quality', cfg.openaiImageQuality || 'high');
+  fd.append('input_fidelity', 'high');
+  fd.append('image[]', new Blob([bytes], { type: 'image/png' }), name);
+  const res = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: `Bearer ${cfg.openaiApiKey}` }, body: fd, signal: AbortSignal.timeout(240_000) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${d.error?.message || ''}`.slice(0, 300));
+  const it = d.data?.[0] || {};
+  return it.b64_json ? Buffer.from(it.b64_json, 'base64') : Buffer.from(await (await fetch(it.url)).arrayBuffer());
+}
+
+async function editReplicate(cfg, bytes) {
+  const H = { Authorization: `Bearer ${cfg.replicateApiToken}`, 'Content-Type': 'application/json' };
+  const dataUrl = 'data:image/png;base64,' + bytes.toString('base64');
+  let res = await fetch(`https://api.replicate.com/v1/models/${cfg.replicateModel || 'google/nano-banana-2'}/predictions`, {
+    method: 'POST', headers: { ...H, Prefer: 'wait=60' },
+    body: JSON.stringify({ input: { prompt: ENHANCE_PROMPT, image_input: [dataUrl], aspect_ratio: 'match_input_image', output_format: 'jpg' } }),
+  });
+  let p = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Replicate ${res.status}: ${p.detail || ''}`);
+  for (let i = 0; i < 80 && !['succeeded', 'failed', 'canceled'].includes(p.status); i++) { await new Promise(r => setTimeout(r, 3000)); p = await (await fetch(p.urls.get, { headers: H })).json(); }
+  if (p.status !== 'succeeded') throw new Error(`Replicate ${p.status}`);
+  return Buffer.from(await (await fetch(Array.isArray(p.output) ? p.output[0] : p.output)).arrayBuffer());
+}
+
+// Converts any upload to PNG first (the edit endpoints want PNG/JPG/WebP), then edits, then WebP.
+export async function enhanceUploads(cfg, work, run, log = () => {}, { max = 12, edit } = {}) {
+  const raw = path.join(work, 'raw'), dir = path.join(work, 'site', 'assets', 'img');
+  if (!fs.existsSync(raw) || cfg.enhanceClientPhotos === false) return { done: [], failed: [] };
+  const which = provider(cfg);
+  if (!which && !edit) return { done: [], failed: [], skipped: 'no image key' };
+  const files = (await fsp.readdir(raw)).filter(f => /^upload-/.test(f) && /\.(jpe?g|png|webp|heic|avif)$/i.test(f) && !/logo|icon|badge|license|licence|certificate|card/i.test(f)).slice(0, max);
+  const done = [], failed = [];
+  for (const f of files) {
+    const base = f.replace(/\.[a-z0-9]+$/i, '');
+    const out = path.join(dir, base + '.webp');
+    const mark = path.join(raw, `enh-${base}.png`);
+    if (fs.existsSync(mark)) { done.push(base + '.webp'); continue; }
+    try {
+      const png = path.join(raw, `in-${base}.png`);
+      const c = await run('npx', ['--yes', 'sharp-cli@6', '-i', path.join(raw, f), '-o', png.split(path.sep).join('/'), '-f', 'png', 'resize', '1536', '1536', '--fit', 'inside', '--withoutEnlargement'], { timeoutMs: 180_000 });
+      const bytes = fs.readFileSync(c.code === 0 && fs.existsSync(png) ? png : path.join(raw, f));
+      const result = edit ? await edit(bytes, f) : which === 'replicate' ? await editReplicate(cfg, bytes) : await editOpenAI(cfg, bytes, base + '.png');
+      await fsp.writeFile(mark, result);
+      const tmp = path.join(raw, `enh-tmp-${base}.png`);
+      await fsp.copyFile(mark, tmp);
+      await fsp.mkdir(dir, { recursive: true });
+      await fsp.rm(out, { force: true });
+      const r = await run('npx', ['--yes', 'sharp-cli@6', '-i', tmp, '-o', out.split(path.sep).join('/'), '-f', 'webp', '-q', '82', 'resize', '1800', '--withoutEnlargement'], { timeoutMs: 180_000 });
+      await fsp.rm(tmp, { force: true });
+      if (r.code !== 0 || !fs.existsSync(out)) throw new Error('could not convert the edited photo');
+      await fsp.appendFile(path.join(work, 'IMAGES.log'), `${new Date().toISOString()}  ${base}.webp  client photo cleaned up (${which || 'test'})\n\n`);
+      done.push(base + '.webp');
+      log(`  client photo cleaned up: ${base}.webp`);
+    } catch (e) { failed.push(`${f}: ${e.message}`); log(`  client photo left as it was (${f}): ${e.message}`); }
+  }
+  return { done, failed };
+}

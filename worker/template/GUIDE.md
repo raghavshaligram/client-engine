@@ -33,7 +33,7 @@ What the skills cannot know about local business sites:
 
 In order of preference:
 
-1. The client's own photos and logo in `site/assets/img` (files starting `upload-` or `current-`). Always use the client's own photos where they fit; a logo goes in the header.
+1. The client's own photos and logo in `site/assets/img` (files starting `upload-` are what they sent us, already retouched; `current-` are from their old site). These are the real thing: their team, vans, premises and finished work may be shown and described as theirs, and they beat any generated picture for the same spot. Use every good one. A logo goes in the header. Look at each with the Read tool before placing it, and leave out any that are blurry, dark or off-topic.
 2. Generated pictures from IMAGES.json (the worker makes them).
 3. Real pictures of the place from open collections via the taste skill's `assets.mjs`, credited in the footer.
 4. Drawings in code from the subject itself.
@@ -62,7 +62,7 @@ Required, and built last on a finished still page (taste-skill references/motion
 
 ## Speed (we check with Google PageSpeed on mobile: 80+ performance, 90+ SEO, 85+ accessibility)
 
-- CSS under 60 KB, JavaScript under 20 KB loaded with `defer`. At most one or two font families from Google Fonts with `display=swap`, or self-hosted.
+- CSS under 60 KB, JavaScript under 20 KB loaded with `defer`. At most one or two font families with `display=swap`. You have no network access, so you cannot download font files: load fonts with a `<link>` to Google Fonts (fonts.googleapis.com) or Fontshare (api.fontshare.com/v2/css?f[]=...), with a size-adjusted system fallback.
 - No layout shift: dimensions on every image, font fallbacks of similar size.
 - Pictures as WebP, hero under 250 KB, others under 200 KB. No file over 600 KB.
 

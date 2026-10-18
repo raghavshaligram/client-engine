@@ -16,7 +16,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ensureSkills, installSkills, SKILL_COMMANDS } from './lib/skills.mjs';
-import { generateImages, provider } from './lib/images.mjs';
+import { generateImages, enhanceUploads, provider } from './lib/images.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WIN = process.platform === 'win32';
@@ -259,7 +259,11 @@ export async function doJob(cfg, job, opts = {}) {
   await fsp.writeFile(path.join(work, 'BRIEF.md'), job.brief);
   for (const f of ['SUMMARY.md', 'RESULT.json']) await fsp.rm(path.join(work, f), { force: true });
   const imgDir = path.join(work, 'site', 'assets', 'img');
-  if (['build', 'revise', 'edit'].includes(job.type)) await prepareImages(job, work);
+  if (['build', 'revise', 'edit'].includes(job.type)) {
+    await prepareImages(job, work);
+    const e = await enhanceUploads(cfg, work, run, log, { edit: opts.editImage });
+    if (e.done.length || e.failed.length) log(`  client photos: ${e.done.length} cleaned up${e.failed.length ? `, ${e.failed.length} left as they were` : ''}`);
+  }
   const pics = async () => (await walk(imgDir)).map(f => path.basename(f)).filter(f => /\.(webp|jpe?g|png|svg|avif)$/i.test(f));
 
   // A new site: plan first (art direction, copy, picture list), then pictures, then the build.
