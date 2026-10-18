@@ -3,6 +3,8 @@
 import { actions, authorised, purchaseAuthorised, json, fail } from '../lib/actions.mjs';
 import { researchTick, sendTick, repliesTick, warmupTick, businessWindow, digestText, budget } from '../lib/autopilot.mjs';
 import { senders } from '../lib/actions.mjs';
+import { agencyActions } from '../lib/agency/actions.mjs';
+import { agencyTick, auditTick } from '../lib/agency/ticks.mjs';
 
 // "Run now" buttons on the Today screen: the same steps the schedules run.
 const manual = {
@@ -10,6 +12,8 @@ const manual = {
   'autopilot.send': () => sendTick({ timeLeft: budget(20000) }),
   'autopilot.replies': () => repliesTick({ timeLeft: budget(22000) }),
   'autopilot.digest': async () => [(await digestText()).text],
+  'agency.tick': () => agencyTick({ timeLeft: budget(22000) }),
+  'agency.audit': () => auditTick({ timeLeft: budget(24000) }),
   'autopilot.warmup': async () => warmupTick({ senders: await senders(), window: businessWindow(), timeLeft: budget(22000) }),
 };
 
@@ -23,7 +27,7 @@ export default async (req) => {
   const ok = authorised(req) || (body.action === 'purchase.record' && purchaseAuthorised(req));
   if (!ok) return fail('Wrong app key', 401);
   if (manual[body.action]) { try { return json({ log: await manual[body.action]() }); } catch (e) { return fail(e.message, 500); } }
-  const fn = actions[body.action];
+  const fn = actions[body.action] || agencyActions[body.action];
   if (!fn) return fail('Unknown action: ' + body.action);
   try { return json(await fn(body)); }
   catch (e) { return fail(e.message || String(e), 500); }

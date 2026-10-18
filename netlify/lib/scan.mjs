@@ -2,6 +2,7 @@
 import dns from 'node:dns';
 import net from 'node:net';
 import { splitEmails } from './clean.mjs';
+import { htmlAudit } from './agency/audit.mjs';
 
 function privateIp(ip) {
   if (net.isIPv6(ip)) {
@@ -102,5 +103,5 @@ export function readSignals(html) {
 
 export async function scanSite(website) {
   const { url, html } = await fetchPage(website);
-  return { url, ...readSignals(html) };
+  return { url, ...readSignals(html), audit: htmlAudit(html, url) };
 }

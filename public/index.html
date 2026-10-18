@@ -85,6 +85,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:1px
   main{padding:16px}
   .grid2,.grid3,.mail-card{grid-template-columns:1fr}
   .row > .grow-text{flex-basis:100%}
+  .seg{display:flex;flex-wrap:wrap;max-width:100%}
   table{display:block;overflow-x:auto}
 }
 </style>
@@ -109,6 +110,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:1px
     <button data-view="send">Send</button>
     <button data-view="replies">Replies <span class="count hide" id="nReplies"></span></button>
     <button data-view="results">Results</button>
+    <button data-view="agency">Agency <span class="count hide" id="nAgency"></span></button>
     <div class="grow"></div>
     <button data-view="products">Products</button>
     <button data-view="settings">Settings</button>
@@ -171,12 +173,12 @@ function renderProductSeg() {
 }
 $('#nav').querySelectorAll('button[data-view]').forEach(b => b.onclick = () => go(b.dataset.view));
 
-const TITLES = { today: 'Today', find: 'Find people', prospects: 'Prospects', queue: 'Queue', send: 'Send', replies: 'Replies', results: 'Results', products: 'Products', settings: 'Settings' };
+const TITLES = { agency: 'Agency', today: 'Today', find: 'Find people', prospects: 'Prospects', queue: 'Queue', send: 'Send', replies: 'Replies', results: 'Results', products: 'Products', settings: 'Settings' };
 async function go(view) {
   S.view = view; store.set('view', view);
   $('#nav').querySelectorAll('button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
   $('#title').textContent = TITLES[view];
-  $('#productSeg').classList.toggle('hide', view === 'settings');
+  $('#productSeg').classList.toggle('hide', view === 'settings' || view === 'agency');
   $('#view').innerHTML = '<div class="empty">Loading…</div>';
   try { await VIEWS[view](); } catch (e) { $('#view').innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
 }
@@ -187,6 +189,8 @@ async function refreshBadges() {
     const nq = q.messages.length, nr = r.replies.length;
     $('#nQueue').textContent = nq; $('#nQueue').classList.toggle('hide', !nq);
     $('#nReplies').textContent = nr; $('#nReplies').classList.toggle('hide', !nr);
+    const ap = S.products.find(p => p.rules?.agency);
+    if (ap) { const a = await api('agency.list', { productId: ap.id }); const n = a.totals.needs_you + a.rows.filter(r => r.stage === 'owner_check').length; $('#nAgency').textContent = n; $('#nAgency').classList.toggle('hide', !n); }
   } catch {}
 }
 
@@ -834,6 +838,107 @@ VIEWS.products = async () => {
     } catch (e) { toast(e.message); }
   };
 };
+
+// ---------------------------------------------------------------- Agency
+const STAGE = {
+  talking: ['Talking', ''], mockup_queued: ['Making mockup', ''], mockup_sent: ['Mockup sent', ''], offer_sent: ['Offer sent', 'warn'],
+  intake: ['Paid: details form', 'good'], building: ['Building', 'good'], qa: ['Checking build', 'good'], owner_check: ['Needs your OK', 'bad'],
+  client_review: ['Client reviewing', 'good'], domain: ['Domain step', 'good'], live: ['Live', 'good'], rest: ['Later', ''], lost: ['Lost', ''],
+};
+const stagePill = s => { const [t, c] = STAGE[s] || [s, '']; return `<span class="pill ${c}">${esc(t)}</span>`; };
+const money = c => '$' + Math.round((c || 0) / 100).toLocaleString();
+
+VIEWS.agency = async () => {
+  const ap = S.products.find(p => p.rules?.agency);
+  if (!ap) { $('#view').innerHTML = '<div class="empty">No agency product yet. Reload the app once to add it.</div>'; return; }
+  const d = await api('agency.list', { productId: ap.id });
+  const t = d.totals, cfg = ap.rules.agency;
+  const need = d.rows.filter(r => r.needs_human), ok = d.rows.filter(r => r.stage === 'owner_check' && !r.needs_human);
+  const missing = cfg.packages.filter(p => !p.dodo_product).map(p => p.name);
+  const workerAge = d.worker ? (Date.now() - Date.parse(d.worker)) / 3600000 : null;
+  const building = d.rows.filter(r => ['building', 'qa'].includes(r.stage)).length;
+  $('#view').innerHTML = `
+    ${missing.length ? `<div class="note warn">Add the Dodo product ID for ${missing.map(esc).join(' and ')} below, or clients can't pay.</div>` : ''}
+    ${building && (workerAge == null || workerAge > 2) ? `<div class="note warn">${building} site${building === 1 ? ' is' : 's are'} waiting to be built, and the build worker on your computer ${workerAge == null ? 'has never checked in' : `last checked in ${Math.round(workerAge)} hours ago`}. Make sure your computer is on and the worker is installed.</div>` : ''}
+    <div class="grid3">
+      <div class="stat"><b>${t.talking}</b><span>in conversation</span></div>
+      <div class="stat"><b>${t.clients}</b><span>clients (${money(t.revenue_cents)})</span></div>
+      <div class="stat"><b>${t.live} / ${t.growth}</b><span>live sites / on Growth</span></div>
+    </div>
+    ${need.length ? `<div class="card"><h2>Waiting for you (${need.length})</h2><p class="sub">The AI handed these over. Answer here (it goes out in their email thread), or hand it back.</p>
+      ${need.map(r => `<div class="note warn" style="margin:12px 0 4px"><b>${esc(r.prospect?.name)}</b> ${stagePill(r.stage)}<br>${esc(r.human_reason || '')}</div>
+        <div class="row" style="margin:6px 0 18px"><button class="btn small" data-open="${r.id}">Open conversation</button></div>`).join('')}</div>` : ''}
+    ${ok.length ? `<div class="card"><h2>Sites waiting for your OK (${ok.length})</h2><p class="sub">The first ${cfg.review_first} sites wait for you before the client sees them. They passed the speed and mobile checks.</p>
+      ${ok.map(r => `<div class="row" style="margin:10px 0"><b style="flex:1">${esc(r.prospect?.name)}</b><a class="btn small" href="${esc(r.preview_url)}" target="_blank" rel="noopener">Open site</a>
+        <button class="btn small primary" data-approve="${r.id}">Send to client</button><button class="btn small" data-fixit="${r.id}">Ask for changes</button></div>`).join('')}</div>` : ''}
+    <div class="card"><h2>All deals</h2>
+      ${d.rows.length ? `<table><tr><th>Business</th><th>Stage</th><th>Links</th><th>Updated</th><th></th></tr>
+      ${d.rows.map(r => `<tr><td><b>${esc(r.prospect?.name)}</b><br><span class="muted small">${esc([r.prospect?.city, r.prospect?.state].filter(Boolean).join(', '))}</span></td>
+        <td>${stagePill(r.stage)}${r.needs_human ? ' <span class="pill bad">you</span>' : ''}${r.growth_status === 'active' ? ' <span class="pill good">Growth</span>' : ''}${r.job ? `<br><span class="muted small">${esc(r.job.type)} ${esc(r.job.status)}</span>` : ''}</td>
+        <td class="small"><a href="${esc(r.links.mockup)}" target="_blank" rel="noopener">mockup</a> · <a href="${esc(r.links.offer)}" target="_blank" rel="noopener">offer</a>${r.preview_url ? ` · <a href="${esc(r.preview_url)}" target="_blank" rel="noopener">preview</a>` : ''}${r.stage === 'live' && r.domain ? ` · <a href="https://${esc(r.domain)}" target="_blank" rel="noopener">live</a>` : ''}</td>
+        <td class="small muted">${fmtTime(r.updated_at)}</td><td class="num"><button class="btn small" data-open="${r.id}">Open</button></td></tr>`).join('')}</table>`
+      : '<div class="empty">No deals yet. A deal starts when someone replies to an agency email.</div>'}
+    </div>
+    <div id="dealBox"></div>
+    <div class="card"><h2>Packages and payments</h2>
+      <p class="sub">Create two products in Dodo Payments: a one-time product for the website and a monthly subscription for Growth. Paste their product IDs here. Then add a webhook in Dodo pointing to <code>${esc(location.origin)}/hooks/dodo</code> and put its secret in Netlify as <code>DODO_WEBHOOK_SECRET</code>.</p>
+      <div class="grid2">${cfg.packages.map(p => `<div><label>${esc(p.name)} ($${p.price}${p.kind === 'monthly' ? ' a month' : ''}): Dodo product ID</label><input data-pkg="${p.id}" value="${esc(p.dodo_product || '')}" placeholder="pdt_..."></div>`).join('')}</div>
+      <div class="grid3">
+        <div><label>Sites you check first</label><input id="cfReview" type="number" min="0" value="${cfg.review_first}"></div>
+        <div><label>Rounds of changes</label><input id="cfRev" type="number" min="0" value="${cfg.revisions}"></div>
+        <div><label>Days to deliver (promised)</label><input id="cfDays" type="number" min="1" value="${cfg.delivery_days}"></div>
+      </div>
+      <p class="small muted">Prices, package wording and the FAQ the AI answers from are in Products &gt; ${esc(ap.name)} &gt; Rules.</p>
+      <div class="row"><button class="btn primary" id="cfSave">Save</button></div>
+    </div>`;
+  const v = $('#view');
+  v.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openDeal(b.dataset.open));
+  v.querySelectorAll('[data-approve]').forEach(b => b.onclick = async () => { b.disabled = true; try { await api('agency.ownerApprove', { id: b.dataset.approve }); toast('Sent to the client.'); go('agency'); } catch (e) { toast(e.message); b.disabled = false; } });
+  v.querySelectorAll('[data-fixit]').forEach(b => b.onclick = async () => { const notes = prompt('What should change before the client sees it? One change per line.'); if (!notes) return; await api('agency.ownerChanges', { id: b.dataset.fixit, notes }); toast('Sent back to the builder.'); go('agency'); });
+  $('#cfSave').onclick = async () => {
+    const packages = [...v.querySelectorAll('[data-pkg]')].map(i => ({ id: i.dataset.pkg, dodo_product: i.value.trim() }));
+    await api('agency.config.save', { productId: ap.id, patch: { packages, review_first: $('#cfReview').value, revisions: $('#cfRev').value, delivery_days: $('#cfDays').value } });
+    S.setup = await api('setup.status'); S.products = S.setup.products; toast('Saved.'); go('agency');
+  };
+};
+
+async function openDeal(id) {
+  const box = $('#dealBox');
+  box.innerHTML = '<div class="card"><div class="empty">Loading…</div></div>';
+  box.scrollIntoView({ behavior: 'smooth' });
+  const d = await api('agency.deal', { id });
+  const p = d.prospect, dl = d.deal;
+  box.innerHTML = `<div class="card">
+    <div class="row"><h2 style="flex:1">${esc(p.name)} ${stagePill(dl.stage)}</h2><button class="btn small" id="dClose">Close</button></div>
+    <p class="sub">${esc(p.email)} · ${esc(p.website || '')}${dl.paid_at ? ` · paid ${fmtDate(dl.paid_at)}` : ''}${dl.domain ? ` · ${esc(dl.domain)}` : ''}</p>
+    ${dl.needs_human ? `<div class="note warn"><b>Waiting for you:</b> ${esc(dl.human_reason || '')}</div>` : ''}
+    <h3>Conversation</h3>
+    <div class="log" style="max-height:420px;font-family:inherit;font-size:13.5px">${d.convo.map(e => `<div style="margin:0 0 14px"><b>${e.who === 'US' ? 'You' : esc(p.name)}</b> <span class="muted small">${fmtTime(e.at)}</span><br>${esc(e.text)}</div>`).join('') || 'Nothing yet.'}</div>
+    ${d.outbox.length ? `<h3>Going out</h3><table>${d.outbox.map(o => `<tr><td class="small">${esc(o.kind)}</td><td class="small">${esc(String(o.body).slice(0, 160))}…</td><td class="small muted">${o.status === 'held' ? 'waiting for mockup' : o.status === 'failed' ? `<span class="pill bad">failed</span> ${esc(o.error || '')}` : fmtTime(o.send_at)}</td>
+      <td class="num">${o.status === 'failed' ? `<button class="btn small" data-retry="${o.id}">Retry</button>` : ''}<button class="btn small danger" data-cancel="${o.id}">Cancel</button></td></tr>`).join('')}</table>` : ''}
+    <h3>Write to them</h3>
+    <textarea class="mail" id="dMsg" placeholder="Your message. It goes out in their email thread within 5 minutes."></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn primary" id="dSend">Send</button>
+      ${dl.needs_human ? '<button class="btn" id="dBack">Hand back to the AI</button>' : ''}
+      ${!dl.paid_at ? '<button class="btn" id="dPaid">Mark as paid</button>' : ''}
+      ${['building', 'qa'].includes(dl.stage) ? '' : dl.paid_at ? '<button class="btn" id="dRebuild">Rebuild site</button>' : ''}
+      ${!dl.paid_at && dl.stage !== 'lost' ? '<button class="btn danger" id="dLost">Mark lost</button>' : ''}
+    </div>
+    ${d.jobs.length ? `<h3>Build jobs</h3><table>${d.jobs.map(j => `<tr><td>${esc(j.type)}</td><td>${esc(j.status)}${j.attempts > 1 ? ` (try ${j.attempts})` : ''}</td><td class="small muted">${esc(j.error || j.output?.summary || '')}</td><td class="small muted">${fmtTime(j.created_at)}</td></tr>`).join('')}</table>` : ''}
+    <h3>History</h3><div class="log">${(dl.log || []).slice().reverse().map(l => `${fmtTime(l.at)}  ${esc(l.note)}`).join('\n') || 'Nothing yet.'}</div>
+  </div>`;
+  const r = () => openDeal(id);
+  $('#dClose').onclick = () => { box.innerHTML = ''; };
+  $('#dSend').onclick = async () => { const text = $('#dMsg').value.trim(); if (!text) return; await api('agency.reply', { id, text }); toast('Queued. It goes out within 5 minutes.'); r(); };
+  const on = (sel, fn) => { const b = $(sel); if (b) b.onclick = fn; };
+  on('#dBack', async () => { const x = await api('agency.handBack', { id }); toast(x.willAnswer ? 'Handed back. The AI will answer their last message.' : 'Handed back.'); go('agency'); });
+  on('#dPaid', async () => { if (!confirm('Mark as paid? This sends them the details form.')) return; await api('agency.markPaid', { id }); go('agency'); });
+  on('#dRebuild', async () => { if (!confirm('Queue a full rebuild of this site?')) return; await api('agency.rebuild', { id }); toast('Rebuild queued.'); r(); });
+  on('#dLost', async () => { await api('agency.lost', { id }); go('agency'); });
+  box.querySelectorAll('[data-cancel]').forEach(b => b.onclick = async () => { await api('agency.cancelMessage', { outboxId: b.dataset.cancel }); r(); });
+  box.querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => { await api('agency.retryMessage', { outboxId: b.dataset.retry }); r(); });
+}
 
 // ---------------------------------------------------------------- Settings
 VIEWS.settings = async () => {

@@ -130,3 +130,78 @@ export const SEED_PRODUCTS = [
     postal_address: '',
   },
 ];
+
+// The web design agency. Same pipeline as the products above (find, read, score, write, send),
+// plus the agency stages: audit, mockup, closing, payment, intake, build, review, launch, Growth.
+export const AGENCY_PRODUCT = {
+  id: 'websites',
+  name: 'Website Studio',
+  site: '',
+  price: 'Website: $497 one time. Growth: $149 a month, optional, cancel any time.',
+  buyer: 'Owners of established US local businesses (home services, health, beauty, professional services) whose website is old, slow or broken on phones.',
+  pains: [
+    'Most of their customers find them on a phone, and the site is slow or broken there, so callers go to the next result.',
+    'The site looks dated (old copyright year, no HTTPS, old builder), which costs trust before anyone calls.',
+    'Agencies quote $3,000 to $10,000 and weeks of meetings for a new site.',
+  ].join('\n'),
+  proof: [
+    'A new site of up to 5 pages: home, services, about, contact and one more page they choose.',
+    'Built mobile-first and fast, checked against Google PageSpeed before they see it.',
+    'Local SEO basics: one page per main service, Google-friendly structure, business details marked up for Google.',
+    'A contact form that emails them each enquiry.',
+    'Hosting included with no monthly fee. They own the site files.',
+    'Delivered about 7 days after they send their details. Two rounds of changes included.',
+    'Before paying anything, they get a free mockup of their new home page.',
+    'Growth ($149 a month, optional): 4 new articles a month aimed at local Google searches, small edits within 2 business days, a monthly report of form enquiries. Cancel any time.',
+  ].join('\n'),
+  offer: 'A free home page mockup first. If they like it: $497 one time for the full site. Growth is optional.',
+  never_say: [
+    'Do not claim any customer count, portfolio, testimonial, award or past client.',
+    'Never promise rankings, traffic, calls or revenue.',
+    'Do not say the mockup already exists unless the conversation shows it was sent.',
+    'Do not insult the current site or whoever built it: state the measured facts plainly.',
+    'Do not mention AI in cold emails.',
+    'Never ask for passwords or logins.',
+    'Do not name competitors.',
+  ].join('\n'),
+  angles: [
+    { id: 'mobile', name: 'Broken or slow on phones', hook: 'Most of their customers look them up on a phone, and the site is slow or broken there.' },
+    { id: 'trust', name: 'Looks unmaintained', hook: 'An old copyright year or "Not secure" warning makes people wonder if the business is still open.' },
+    { id: 'free', name: 'See it first, free', hook: 'A free mockup of their new home page, before any money or meetings.' },
+  ],
+  segments: [
+    { id: 'trades', name: 'Home services', ask: 'Want me to put together a free mockup of a new home page for you? No cost and no call needed.', landing: '' },
+    { id: 'health', name: 'Health and dental', ask: 'Want me to put together a free mockup of a new home page for your practice? No cost and no call needed.', landing: '' },
+    { id: 'beauty', name: 'Salons and spas', ask: 'Want me to put together a free mockup of a new home page for you? No cost and no call needed.', landing: '' },
+    { id: 'pro', name: 'Professional services', ask: 'Want me to put together a free mockup of a new home page for your firm? No cost and no call needed.', landing: '' },
+  ],
+  rules: {
+    steps: 3, gaps: [0, 3, 8], words: [95, 60, 45],
+    links: [0, 0, 0], tracking: false, min_score: 5,
+    reason_line: '', need_own_domain_email: false, rest_days: 90,
+    autopilot: 'on',
+    agency: {
+      packages: [
+        { id: 'site', name: 'Website', price: 497, kind: 'once', dodo_product: '', summary: 'Up to 5 pages, mobile-first, local SEO basics, contact form, hosting included, delivered in about 7 days, 2 rounds of changes.' },
+        { id: 'growth', name: 'Growth', price: 149, kind: 'monthly', dodo_product: '', summary: '4 local SEO articles a month, small edits within 2 business days, monthly enquiry report. Cancel any time.' },
+      ],
+      delivery_days: 7,
+      revisions: 2,
+      review_first: 3,        // the first N finished sites wait for your OK before the client sees them
+      max_auto_messages: 10,  // per deal before payment; after that the conversation comes to you
+      escalate_on_discount: true,
+      faq: [
+        'If asked whether AI is used: yes, we use AI tools to design and build faster, which is how the price stays low, and every site is checked against Google\'s speed and mobile tests before the client sees it.',
+        'If asked for examples of past work: the mockup is built for their business, which is the best example; do not invent past clients.',
+        'Domain: they keep their domain where it is. Going live takes one DNS change we walk them through. Their email is not affected.',
+        'If they have no access to their domain: we explain who usually holds it (whoever built the old site, or the registrar account) and offer to wait.',
+        'Payment is by card through our checkout. Nothing is charged until they choose to buy.',
+        'If they want a call: offer to answer by email, and say a call can be arranged if they prefer.',
+      ].join('\n'),
+    },
+  },
+  from_name: '',
+  postal_address: '',
+};
+
+SEED_PRODUCTS.push(AGENCY_PRODUCT);

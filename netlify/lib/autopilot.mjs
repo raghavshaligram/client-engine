@@ -90,7 +90,7 @@ export async function repliesTick({ timeLeft = budget(14000), perInbox = 15 } = 
   for (const s of (await senders()).filter(x => x.mode !== 'browser')) {
     const ps = await db.select('prospects', {
       select: 'id,name,email,thread_id,product_id', order: 'replies_checked_at.asc.nullsfirst', limit: perInbox,
-      filters: { sender: s.email, thread_id: ['not.is', null], last_sent_at: ['gte', since], status: ['in', ['contacted', 'drafted', 'done', 'rest', 'replied', 'interested']] },
+      filters: { sender: s.email, thread_id: ['not.is', null], last_sent_at: ['gte', since], status: ['in', ['contacted', 'drafted', 'done', 'rest', 'replied', 'interested', 'won']] },
     });
     if (!ps.length) continue;
     const ids = ps.map(p => p.id);
@@ -109,6 +109,7 @@ export async function repliesTick({ timeLeft = budget(14000), perInbox = 15 } = 
           const r = await actions['replies.add']({
             prospectId: p.id, gmailId: m.id, from, subject: gmail.header(m, 'Subject'),
             body: gmail.stripQuoted(gmail.bodyText(m.payload)) || m.snippet || '', date: Number(m.internalDate) || null,
+            messageId: gmail.header(m, 'Message-ID') || null,
           });
           if (r.duplicate) continue;
           log.push(`${p.name}: ${r.reply.label}`);
@@ -155,6 +156,24 @@ export async function digestText(now = new Date()) {
       for (const r of waiting) lines.push(`  - ${r.from_addr} [${r.label}]: ${String(r.body).split('\n')[0].slice(0, 120)}`);
     }
     if (ready < 20 && !p.paused) lines.push(`Running low on people. Add searches or a registry file.`);
+    lines.push('');
+  }
+  const deals = await db.select('deals', { select: 'id,slug,stage,needs_human,human_reason,paid_at,growth_status,prospect_id,updated_at', limit: 1000 }).catch(() => []);
+  if (deals.length) {
+    const names = Object.fromEntries((await db.select('prospects', { select: 'id,name', filters: { id: ['in', deals.map(d => d.prospect_id)] } })).map(p => [p.id, p.name]));
+    const waiting = deals.filter(d => d.needs_human);
+    const newPaid = deals.filter(d => d.paid_at && d.paid_at >= since);
+    lines.push('== Agency ==');
+    lines.push(`In conversation: ${deals.filter(d => ['talking', 'mockup_queued', 'mockup_sent', 'offer_sent'].includes(d.stage)).length}. Clients: ${deals.filter(d => d.paid_at).length} (${newPaid.length} new). Live: ${deals.filter(d => d.stage === 'live').length}. On Growth: ${deals.filter(d => d.growth_status === 'active').length}.`);
+    const building = deals.filter(d => ['building', 'qa'].includes(d.stage)).length;
+    if (building) lines.push(`Being built or checked: ${building}. The build worker on your computer must be running for these to move.`);
+    const own = deals.filter(d => d.stage === 'owner_check');
+    if (own.length) lines.push(`Sites waiting for your OK: ${own.map(d => names[d.prospect_id]).join(', ')}`);
+    if (waiting.length) {
+      lines.push(`Conversations waiting for you (${waiting.length}):`);
+      for (const d of waiting) lines.push(`  - ${names[d.prospect_id]}: ${d.human_reason || ''}`.slice(0, 200));
+    }
+    needsYou += waiting.length + own.length;
     lines.push('');
   }
   return { text: lines.join('\n'), needsYou };

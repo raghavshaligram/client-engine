@@ -5,7 +5,7 @@ import { SEED_PRODUCTS } from './products.mjs';
 import { fromMapsRow, fromRegistryRow, lower } from './clean.mjs';
 import { scanSite } from './scan.mjs';
 import { score } from './score.mjs';
-import { draftOnce, footer, readReply, pickAngle } from './brain.mjs';
+import { draftOnce, footer, readReply, pickAngle, quickLabel } from './brain.mjs';
 import { serverGmailReady, send as gmailSend, thread as gmailThread, header } from './gmail.mjs';
 import { senderPlan, warmupHealth, checkDomain } from './warmup.mjs';
 
@@ -190,7 +190,7 @@ export const actions = {
       filters, order: 'score.desc,created_at.asc', limit: Math.min(500, limit), offset,
     });
     const counts = {};
-    for (const st of ['new', 'scanned', 'drafted', 'contacted', 'replied', 'interested', 'won', 'rest', 'done', 'skipped'])
+    for (const st of ['new', 'auditing', 'scanned', 'drafted', 'contacted', 'replied', 'interested', 'won', 'rest', 'done', 'skipped'])
       counts[st] = await db.count('prospects', { product_id: productId, status: st });
     return { rows, counts };
   },
@@ -212,16 +212,22 @@ export const actions = {
   async 'prospects.scan'({ productId, limit = 4 }) {
     const product = await getProduct(productId);
     const batch = await db.select('prospects', { filters: { product_id: productId, status: 'new' }, order: 'created_at.asc', limit: Math.min(6, limit) });
+    const agency = !!product.rules?.agency;
     const results = await Promise.all(batch.map(async p => {
       let patch = { status: 'scanned' };
       if (p.website) {
         try {
           const s = await scanSite(p.website);
           patch.signals = s.signals; patch.site_text = s.site_text;
+          if (agency) {
+            patch.extra = { ...(p.extra || {}), audit: { ...s.audit, final_url: s.url } };
+            if (process.env.PSI_API_KEY) patch.status = 'auditing'; // the agency tick adds PageSpeed, then marks it scanned
+          }
         } catch (e) {
           patch.extra = { ...(p.extra || {}), scan_error: e.message };
+          if (agency) { patch.status = 'skipped'; patch.skip_reason = 'website did not load: ' + e.message; }
         }
-      }
+      } else if (agency) { patch.status = 'skipped'; patch.skip_reason = 'no website'; }
       Object.assign(patch, score({ ...p, ...patch }, product));
       await db.update('prospects', { id: p.id }, patch);
       return { id: p.id, name: p.name, score: patch.score, error: patch.extra?.scan_error };
@@ -402,15 +408,28 @@ export const actions = {
     return { threads: ps, knownIds: [...known, ...ours].map(r => r.gmail_id).filter(Boolean) };
   },
 
-  async 'replies.add'({ prospectId, gmailId, from, subject, body, date }) {
+  async 'replies.add'({ prospectId, gmailId, from, subject, body, date, messageId }) {
     const p = await db.one('prospects', { id: prospectId });
     if (!p) throw new Error('Unknown prospect');
     if (await db.one('replies', { gmail_id: gmailId })) return { duplicate: true };
     const product = await getProduct(p.product_id);
+    // Agency: anything that isn't a bounce, auto-reply or opt-out goes to the closer (the agency tick).
+    if (product.rules?.agency && !['bounce', 'auto_reply', 'unsubscribe'].includes(quickLabel({ from, subject, body }))) {
+      const [row] = await db.insert('replies', [{
+        prospect_id: p.id, product_id: p.product_id, gmail_id: gmailId, message_id: messageId || null, from_addr: from, subject,
+        body: String(body).slice(0, 8000), label: 'pending', handled: false, received_at: date ? iso(date) : iso(now()),
+      }]);
+      await db.update('messages', { prospect_id: p.id, status: ['in', ['draft', 'approved']] }, { status: 'rejected', error: 'they replied' });
+      if (!['won', 'interested'].includes(p.status)) await db.update('prospects', { id: p.id }, { status: 'replied', next_due_at: null });
+      const { dealFor } = await import('./agency/deals.mjs');
+      const deal = await dealFor(p);
+      await db.update('deals', { id: deal.id }, { pending_reply: true });
+      return { reply: row, brake: '' };
+    }
     const read = await readReply({ product, prospect: p, reply: { from, subject, body } });
     const quiet = ['auto_reply'].includes(read.label);
     const [row] = await db.insert('replies', [{
-      prospect_id: p.id, product_id: p.product_id, gmail_id: gmailId, from_addr: from, subject,
+      prospect_id: p.id, product_id: p.product_id, gmail_id: gmailId, message_id: messageId || null, from_addr: from, subject,
       body: String(body).slice(0, 8000), label: read.label, answer: read.answer,
       handled: quiet || ['bounce', 'unsubscribe'].includes(read.label),
       received_at: date ? iso(date) : iso(now()),
@@ -518,7 +537,7 @@ export const actions = {
     const cutoff = iso(now().getTime() - 90 * DAY);
     for (const p of await db.select('products', { order: 'id' })) {
       if (p.paused) continue;
-      const ready = await db.count('prospects', { product_id: p.id, status: ['in', ['new', 'scanned']] });
+      const ready = await db.count('prospects', { product_id: p.id, status: ['in', ['new', 'auditing', 'scanned']] });
       if (ready >= READY_TARGET) continue;
       const fresh = await db.select('scrape_queries', { filters: { product_id: p.id, last_run_at: null }, order: 'created_at.asc', limit });
       const old = fresh.length < limit ? await db.select('scrape_queries', { filters: { product_id: p.id, last_run_at: ['lt', cutoff] }, order: 'last_run_at.asc', limit: limit - fresh.length }) : [];

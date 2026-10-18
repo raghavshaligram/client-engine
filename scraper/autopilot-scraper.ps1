@@ -40,7 +40,7 @@ if (-not $env:CE_FAKE_SCRAPER) {
   if ($LASTEXITCODE -ne 0) { Log 'Docker is not running. Start Docker Desktop (and set it to start when you sign in).'; exit 1 }
 }
 
-$keep = 'title', 'category', 'address', 'website', 'phone', 'review_count', 'review_rating', 'emails', 'status', 'complete_address', 'link', 'about', 'descriptions'
+$keep = 'title', 'category', 'address', 'website', 'phone', 'review_count', 'review_rating', 'emails', 'status', 'complete_address', 'link', 'about', 'descriptions', 'open_hours', 'thumbnail'
 $groups = $queries | Group-Object -Property { "$($_.productId)|$($_.segment)" }
 foreach ($g in $groups) {
   $productId, $segment = $g.Name.Split('|')
