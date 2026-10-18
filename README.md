@@ -133,7 +133,8 @@ A fourth "product" that sells and delivers websites to US local businesses, on i
 | Guardrails | Every answer is checked twice (rules in code, then an AI editor). Invented prices, raw links, promises, discounts, custom work, calls, complaints or anything unsure go to you instead, by email. After 10 AI messages without a sale it hands the conversation to you. "No" means suppressed for ever. |
 | Payment | Dodo Payments checkout. The webhook starts the project: thank-you email with the details form. |
 | Details form | Prefilled from what we know. Uploads go to private storage. Reminder after 2 days; after 5 days it builds from what it has. |
-| Build | The worker on your computer runs Claude Code with file tools only (no shell, no web), following `worker/template/GUIDE.md`, then checks the result, deploys to Cloudflare Pages and backs up the source. |
+| Build | The worker on your computer runs Claude Code in two steps. First art direction: the taste skill deals a direction, Claude writes the idea, the copy and a list of pictures, using UI UX Pro Max and Impeccable. The worker generates those pictures (Replicate or OpenAI). Then the build, with a full motion layer. Claude Code can only edit files and run the skills' own scripts. |
+| Design gate | The taste inspector (real Chrome, three widths) fails the build on template tells: eyebrow labels, numbered lists, hairlines, gradients, card rows, too few pictures, no focal point, no motion, long headlines. Failures go back to Claude for up to 3 rounds, together with our own checks (links, SEO basics, contact form, reduced motion, no dashes). |
 | Checks | PageSpeed on the preview: 80+ performance, 90+ SEO, 85+ accessibility, or it goes back for up to 2 automatic fixes. |
 | Your OK | The first 3 sites wait for your "Send to client" on the Agency screen. After that they go straight to the client. |
 | Review | The client approves or lists changes on their review page (2 rounds included; more comes to you). |
@@ -152,7 +153,9 @@ A fourth "product" that sells and delivers websites to US local businesses, on i
 7. **Your public address:** clients see links like `/m/...` and `/start/...`. Point a subdomain of your studio's domain (for example `hello.yourstudio.com`) at this Netlify site and set `PUBLIC_URL` to it. Without it, the Netlify address is used.
 8. **DataForSEO (optional, recommended):** set `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD`. Adds search volumes to cold emails and picks Growth article topics. Cached, so each city and service is paid for once.
 9. **The build worker (on the same computer as the scraper):**
-   - Install Node.js LTS and Claude Code (`npm install -g @anthropic-ai/claude-code`), then run `claude` once and sign in. Builds use your Claude plan.
+   - Install Node.js LTS, Python 3 (python.org, tick "Add to PATH") and Claude Code (`npm install -g @anthropic-ai/claude-code`), then run `claude` once and sign in. Builds use your Claude plan. Chrome or Edge must be installed (the design inspector uses it).
+   - Pictures: put a Replicate token (`replicateApiToken`) or an OpenAI key (`openaiApiKey`, the same one HarvestMath uses) in `config.json`. The worker makes the pictures itself; the key is never given to Claude Code or put in a site. Budget: `maxImages` per site (default 8), one per Growth article.
+   - Design skills: on first run the worker downloads taste-skill, Impeccable, UI UX Pro Max and avoid-ai-writing at the exact versions pinned in `worker/skills.json` (each was read before pinning). To update one, read its new SKILL.md, then change the commit there.
    - In `worker/`, copy `config.example.json` to `config.json` and fill it in.
    - Run `node agency-worker.mjs --check`, then right-click `install-worker.ps1` > Run with PowerShell. It checks for jobs every 10 minutes.
    - Mac or Linux: `crontab -e` and add `*/10 * * * * cd /path/to/worker && node agency-worker.mjs`.

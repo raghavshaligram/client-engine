@@ -2,3 +2,4 @@ config.json
 logs/
 sites/
 .lock
+vendor/

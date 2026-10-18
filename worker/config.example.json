@@ -3,6 +3,11 @@
   "appKey": "the same APP_KEY you set in Netlify",
   "cloudflareAccountId": "from the Cloudflare dashboard, right-hand side of any page",
   "cloudflareApiToken": "a token with Cloudflare Pages: Edit",
-  "model": "",
-  "maxJobs": 2
+
+  "replicateApiToken": "optional: r8_... (used first when set; model google/nano-banana-2)",
+  "openaiApiKey": "optional: sk-... (used when there is no Replicate token; model gpt-image-2)",
+  "maxImages": 8,
+
+  "model": "opus",
+  "maxJobs": 1
 }

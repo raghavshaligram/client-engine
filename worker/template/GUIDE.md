@@ -16,26 +16,55 @@ You are building or changing a real local business's website. It must be fast on
 - You may show the Google rating exactly as given ("4.8 from 88 Google reviews"). Do not mark it up as review schema.
 - If BRIEF.md says to hide the street address, show the city only, everywhere, including structured data.
 - No placeholder text of any kind. If a fact is missing, write around it.
+- Where a design skill says to fill gaps with sample content (sample names, prices, projects) or to show a live thing built on assumed data, this guide overrides it: client sites carry only real facts. The live thing uses real facts from BRIEF.md (their hours, their service towns, their services) or is left out.
 
 ## Design
 
-- Start from the mockup direction in BRIEF.md (style family, headline, structure) and the client's own preferences. Make it feel specific to this trade and town: the hero should open with what a customer of this business most needs (for trades usually the phone number and the main service; for clinics booking and reassurance; for salons the look and booking; for firms credibility and a clear first step).
-- Pick a deliberate palette (4 to 6 colours, AA contrast for text) and at most one Google Font family in at most two weights, loaded with `display=swap`, or a good system font stack. Use the client's brand colours if given.
-- Avoid template tells: identical rounded cards with soft grey shadows everywhere, gradient blobs, ALL-CAPS eyebrow labels over every heading, emoji icons, stock-photo looks. One memorable element; everything else calm.
-- Mobile first. Tap targets at least 44px. On phones, a call button stays easy to reach (a slim sticky bar for trades and clinics).
-- Visible keyboard focus, `prefers-reduced-motion` respected, real `<button>`/`<a>` elements, labels on every form field, `alt` text on every meaningful image (empty alt for decorative ones), one `<h1>` per page.
+The look comes from the design skills in `.claude/skills`, led by design-taste-frontend: its art direction, house rules and laws, checked by its inspector. The worker runs that inspector after you finish and sends every FAIL back to you, so treat its rules as hard requirements: no eyebrow labels, no 01/02/03 numbering, no hairline rules, no gradients, no shadows at rest, no icon-topped card rows, headlines of two lines or fewer at every width, at least four real pictures on the home page and on service pages, and a real motion layer.
 
-## Images
+What the skills cannot know about local business sites:
 
-- Only images in `site/assets/img` (the client's uploads and photos from their current site). Never hotlink, never use stock or AI images, never reference an image that isn't in that folder.
-- Always set `width` and `height`, use `loading="lazy"` below the fold, and `fetchpriority="high"` on the hero image if there is one. If there are no photos, design without them (type, colour, shapes); that is fine.
-- A logo file named `current-logo` or an upload with "logo" in its name is their logo; use it in the header if it looks like a logo.
+- The visitor's first question is "can they help me, and how do I reach them". The first screen answers it in large type: what they do, where, and the phone number or booking action. For trades and clinics, a call button stays within thumb reach on phones (a slim sticky bar is a real overlay, so a shadow on it is fine).
+- Every page is a real page of the same site: one direction carried through home, every service page, about and contact. Service pages are not stripped-down templates; each gets its own picture and its own composition from the direction.
+- Mobile first: tap targets at least 44px, no sideways scroll at 360px, forms usable with a thumb.
+- Accessibility: visible keyboard focus, real buttons and links, labels on every form field, alt text on every meaningful picture, one h1 per page, AA contrast.
+
+## Pictures
+
+In order of preference:
+
+1. The client's own photos and logo in `site/assets/img` (files starting `upload-` or `current-`). Always use the client's own photos where they fit; a logo goes in the header.
+2. Generated pictures from IMAGES.json (the worker makes them).
+3. Real pictures of the place from open collections via the taste skill's `assets.mjs`, credited in the footer.
+4. Drawings in code from the subject itself.
+
+Never hotlink, never reference a file that is not in `site/assets/img`. Set `width` and `height` on every image, `loading="lazy"` below the fold, `fetchpriority="high"` on the hero picture.
+
+### Generated pictures (rules for IMAGES.json)
+
+Generated pictures show the world around the business, never fake evidence of the business itself. This matters: a visitor must not be misled.
+
+- Allowed: the trade's materials and tools in close-up (a copper fitting, a water heater's valve, scissors and combs on a station), the kind of place the service happens in (a sunlit Austin bungalow kitchen, a clean dental chair under daylight, a quiet salon interior), the town and its streets, hands at work with no face shown.
+- Not allowed: anything presented as the client's own staff, owners, vans, uniforms, premises, finished jobs, before-and-after shots or customers; recognisable faces; real people; text, signs, logos, prices or watermarks in the picture.
+- Alt text describes what is shown plainly ("Copper pipe fittings on a workbench"), never "our team" or "our work".
+- Prompts: photographic, natural light, a named lens and angle, the direction's palette mood, specific to this trade and town. One clear subject per picture. Aspect chosen for where it sits on the page.
+
+## Motion
+
+Required, and built last on a finished still page (taste-skill references/motion.md, impeccable reference/animate.md):
+
+- One signature move from the direction, done well (the hero line reveal, an image shutter, a scroll-linked picture).
+- Section entrances choreographed per section (heading, text, picture), varied by content, once each.
+- Press, hover and focus feedback on every control.
+- One moving picture (a slow drift or scale on a large photograph, or a scroll-linked move).
+- Transform, opacity and clip-path only. Vanilla CSS and a small script with IntersectionObserver; no libraries, no external scripts.
+- Every move has a `prefers-reduced-motion` fallback, and all content is visible with JavaScript off (hide-then-reveal only under an `html.js` class set by a one-line inline script).
 
 ## Speed (we check with Google PageSpeed on mobile: 80+ performance, 90+ SEO, 85+ accessibility)
 
-- One CSS file, under 40 KB. JavaScript only if needed, under 10 KB, loaded with `defer`.
-- No layout shift: dimensions on images, fonts with fallbacks of similar size.
-- No file over 600 KB.
+- CSS under 60 KB, JavaScript under 20 KB loaded with `defer`. At most one or two font families from Google Fonts with `display=swap`, or self-hosted.
+- No layout shift: dimensions on every image, font fallbacks of similar size.
+- Pictures as WebP, hero under 250 KB, others under 200 KB. No file over 600 KB.
 
 ## Local SEO
 
