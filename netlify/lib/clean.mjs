@@ -117,6 +117,9 @@ export function fromMapsRow(row, { productId, segment, needOwnDomain, sourceFile
       extra: {
         maps_link: row.link || '', about: [row.about, row.descriptions].map(v => String(v ?? '').trim()).find(v => v && !/^(\[\]|\{\}|null)$/.test(v))?.slice(0, 600) || '',
         generic_email: isGeneric(email),
+        address: (row.address || '').trim(),
+        hours: String(row.open_hours || '').trim().slice(0, 800) || '',
+        thumbnail: /^https?:\/\//.test(row.thumbnail || '') ? row.thumbnail : '',
       },
     },
   };

@@ -39,11 +39,11 @@ test('auth: wrong key is refused', async () => {
   assert.equal(ok.status, 200);
 });
 
-test('setup seeds the three products once', async () => {
+test('setup seeds the products once', async () => {
   const s = await A['setup.status']();
-  assert.deepEqual(s.products.map(p => p.id), ['keephoa', 'pdfmacro', 'ringsparrow']);
+  assert.deepEqual(s.products.map(p => p.id), ['keephoa', 'pdfmacro', 'ringsparrow', 'websites']);
   await A['setup.status']();
-  assert.equal(db.T.products.length, 3);
+  assert.equal(db.T.products.length, 4);
   await A['products.save']({ product: { id: 'ringsparrow', from_name: 'Raghav Shaligram', postal_address: 'PO Box 1, Austin, TX 78701' } });
   await A['senders.save']({ list: [{ email: 'Raghav@GetRingSparrow.co', product_id: 'ringsparrow', segment: 'trades', daily_cap: 2, warmed: true }] });
 });

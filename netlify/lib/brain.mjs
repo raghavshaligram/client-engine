@@ -1,4 +1,5 @@
 // The thinking parts: writer, checker, reply reader and learner.
+import { auditFacts } from './agency/audit.mjs';
 
 const MODEL = () => process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 
@@ -43,7 +44,7 @@ NEVER SAY:
 ${p.never_say}`;
 }
 
-function prospectFacts(pr) {
+export function prospectFacts(pr) {
   const x = pr.extra || {}, s = pr.signals || {};
   const lines = [
     `Name: ${pr.name}`, pr.category && `Category: ${pr.category}`,
@@ -56,7 +57,8 @@ function prospectFacts(pr) {
     x.test_call && `Test call made: ${x.test_call}`,
     x.contact && `Contact name on file: ${x.contact}`,
   ].filter(Boolean);
-  return lines.join('\n') + (pr.site_text ? `\n\nTEXT FROM THEIR WEBSITE (the only source for a personal detail):\n${pr.site_text}` : '') +
+  const audit = auditFacts(pr);
+  return lines.join('\n') + (audit ? '\n\n' + audit : '') + (pr.site_text ? `\n\nTEXT FROM THEIR WEBSITE (the only source for a personal detail):\n${pr.site_text}` : '') +
     (x.about ? `\n\nTHEIR GOOGLE PROFILE ABOUT TEXT:\n${x.about}` : '');
 }
 
@@ -99,6 +101,10 @@ export async function writeEmail({ product, prospect, step, angle, previous = []
   const ang = (product.angles || []).find(a => a.id === angle) || product.angles?.[0] || {};
   const task = prospect.status === 'rest'
     ? `They replied earlier that the timing was wrong, and it has been about three months. Write one short, friendly check-in in the same thread asking if now is a better time. No pressure, no new pitch. ${maxLinks ? 'You may include {{LINK}} once.' : ''}`
+    : step === 1 && r.agency
+    ? `Write email 1 of ${r.steps}. Mention one or two findings from the WEBSITE AUDIT, stated plainly with their real numbers, and in one sentence why that matters to their customers. If the audit found nothing clearly wrong, return skip. If the facts give a search volume, you may use it once. Do not pitch a price. The last line must be exactly: "${seg.ask || 'Want me to put together a free mockup of a new home page for you?'}" Angle: ${ang.name}: ${ang.hook}`
+    : step > 1 && step < r.steps && r.agency
+    ? `Write follow-up ${step} of ${r.steps}. Use a different measured finding from the WEBSITE AUDIT than the earlier email, or one true fact from the product file, in one or two sentences. Repeat the free mockup offer as a short question.`
     : step === 1
     ? `Write email 1 of ${r.steps}. One observation about them (the real detail), one sentence on what the product does for that, then this question as the last line: "${seg.ask || 'Worth a quick look?'}". Angle: ${ang.name}: ${ang.hook}`
     : step === r.steps

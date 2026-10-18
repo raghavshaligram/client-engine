@@ -7,9 +7,13 @@ const DEFAULTS = {
   messages: { status: 'draft', edited: false },
   replies: { handled: false },
   suppression: {}, settings: {}, scrape_queries: {}, warmup: { cleaned: false, error: null, replied_at: null, landed_spam: null },
+  deals: { stage: 'talking', needs_human: false, pending_reply: false, auto_messages: 0, mockup: null, growth_status: 'none', fix_attempts: 0, revisions_used: 0, owner_ok: false, seo: {}, reminders: {}, log: [], intake: null, intake_at: null, paid_at: null, preview_url: null, next_check_at: null, mockup_notes: null, domain: null },
+  outbox: { status: 'queued', to_addr: null, hold_for: null, reply_to: null },
+  jobs: { status: 'queued', attempts: 0, input: {}, claimed_at: null },
+  site_leads: {}, webhook_events: {}, kw_cache: {},
 };
-const KEYS = { products: ['id'], prospects: ['id'], messages: ['id'], replies: ['id'], suppression: ['email'], settings: ['key'], scrape_queries: ['id'], warmup: ['id'] };
-const UNIQUE = { prospects: [['product_id', 'email']], replies: [['gmail_id']], scrape_queries: [['product_id', 'query']] };
+const KEYS = { products: ['id'], prospects: ['id'], messages: ['id'], replies: ['id'], suppression: ['email'], settings: ['key'], scrape_queries: ['id'], warmup: ['id'], deals: ['id'], outbox: ['id'], jobs: ['id'], site_leads: ['id'], webhook_events: ['id'], kw_cache: ['key'] };
+const UNIQUE = { prospects: [['product_id', 'email']], replies: [['gmail_id']], scrape_queries: [['product_id', 'query']], deals: [['prospect_id'], ['slug']] };
 
 export function fakeDb() {
   const T = Object.fromEntries(Object.keys(DEFAULTS).map(t => [t, []]));
@@ -111,6 +115,10 @@ export function fakeOpenAI(behaviour = {}) {
     };
     else if (sys.startsWith('You are a strict editor')) out = behaviour.checker ? behaviour.checker(user, calls) : { score: 8, problems: [] };
     else if (sys.startsWith('You read replies')) out = behaviour.reader ? behaviour.reader(user) : { label: 'interested', summary: 'wants video', answer: 'Here it is: https://ringsparrow.com' };
+    else if (sys.startsWith('You answer emails for a small web design studio')) out = behaviour.closer ? behaviour.closer(user, calls) : { intent: 'question', action: 'reply', reply: 'Happy to help.\n\nRaghav', confidence: 0.9 };
+    else if (sys.startsWith('You write the copy for a one-page website mockup')) out = behaviour.mockup ? behaviour.mockup(user) : {
+      headline: 'Austin plumbing done right', subhead: 'Family-owned plumbers serving Austin homes.', services: [{ name: 'Water heaters', text: 'Repair and replacement of tank and tankless water heaters.' }, { name: 'Drain cleaning', text: 'Clearing slow and blocked drains.' }],
+      why: [{ title: '4.8 stars on Google', text: 'From 88 reviews.' }], about: 'A family-owned plumbing company in Austin.', area: 'Serving Austin, TX', cta: 'Get a free quote' };
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }), { status: 200 });
   }
   return { calls, handle };

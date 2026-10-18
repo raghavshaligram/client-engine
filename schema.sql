@@ -155,3 +155,115 @@ create table if not exists warmup (
 );
 create index if not exists warmup_from on warmup(from_addr, sent_at);
 alter table warmup enable row level security;
+
+-- ============================================================================
+-- Agency mode (Website Studio). Safe to run again.
+-- ============================================================================
+alter table replies add column if not exists message_id text;   -- their Message-ID header, to reply in the thread
+
+-- One deal per prospect who replied: the whole journey from first reply to a live site and Growth.
+create table if not exists deals (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,                 -- used in the public links: /m/<slug>, /start/<slug>, /intake/<slug>, /review/<slug>
+  prospect_id uuid not null unique references prospects(id) on delete cascade,
+  product_id text not null,
+  stage text not null default 'talking',     -- talking | mockup_queued | mockup_sent | offer_sent | intake | building | qa | owner_check | client_review | domain | live | rest | lost
+  needs_human boolean not null default false,
+  human_reason text,
+  pending_reply boolean not null default false,
+  auto_messages int not null default 0,
+  mockup jsonb,                              -- the copy and style of the free mockup
+  mockup_notes text,                         -- changes they asked for on the mockup
+  customer_email text,
+  paid_at timestamptz,
+  amount_cents int,
+  payment_id text,
+  subscription_id text,
+  growth_status text not null default 'none',  -- none | active | cancelled
+  growth_since timestamptz,
+  intake jsonb,
+  intake_at timestamptz,
+  project text,                              -- Cloudflare Pages project name
+  preview_url text,
+  qa jsonb,
+  fix_attempts int not null default 0,
+  revisions_used int not null default 0,
+  owner_ok boolean not null default false,
+  domain text,                               -- the hostname we put the site on, e.g. www.example.com
+  dns_host text,
+  live_at timestamptz,
+  seo jsonb not null default '{}',           -- {keywords:[{keyword,volume}], used:[...]}
+  reminders jsonb not null default '{}',
+  log jsonb not null default '[]',
+  next_check_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists deals_stage on deals(stage);
+alter table deals enable row level security;
+
+-- Messages the agency sends inside a prospect's thread (answers, links, project updates).
+create table if not exists outbox (
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid references deals(id) on delete cascade,
+  prospect_id uuid not null references prospects(id) on delete cascade,
+  kind text,                                 -- reply | intake | review | live | report | lead | owner
+  body text not null,
+  send_at timestamptz not null default now(),
+  status text not null default 'queued',     -- queued | held | sent | failed | cancelled
+  hold_for text,                             -- e.g. mockup: waits until the mockup exists
+  to_addr text,                              -- default: the prospect; site enquiries go to the client's chosen address
+  reply_to text,
+  subject text,
+  error text,
+  gmail_id text,
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists outbox_due on outbox(status, send_at);
+alter table outbox enable row level security;
+
+-- Work for the build worker on your computer: build, fix, revise, edit, blog.
+create table if not exists jobs (
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid not null references deals(id) on delete cascade,
+  type text not null,
+  status text not null default 'queued',     -- queued | running | done | failed
+  input jsonb not null default '{}',
+  output jsonb,
+  attempts int not null default 0,
+  error text,
+  claimed_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists jobs_status on jobs(status, created_at);
+alter table jobs enable row level security;
+
+-- Enquiries from the contact forms on client sites.
+create table if not exists site_leads (
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid not null references deals(id) on delete cascade,
+  name text, email text, phone text, message text, page text,
+  created_at timestamptz not null default now()
+);
+alter table site_leads enable row level security;
+
+-- Payment webhooks already handled (Dodo can deliver the same event more than once).
+create table if not exists webhook_events (
+  id text primary key,
+  type text,
+  created_at timestamptz not null default now()
+);
+alter table webhook_events enable row level security;
+
+-- Search volumes from DataForSEO, so the same city and service is only paid for once.
+create table if not exists kw_cache (
+  key text primary key,
+  value jsonb,
+  fetched_at timestamptz not null default now()
+);
+alter table kw_cache enable row level security;
+
+-- Private file storage for logos and photos clients upload, and backups of each site's source.
+insert into storage.buckets (id, name, public) values ('agency', 'agency', false) on conflict (id) do nothing;

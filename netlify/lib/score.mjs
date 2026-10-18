@@ -5,7 +5,10 @@ const CALL_TRADES = /plumb|hvac|heating|air condition|electric|roof|tile|floor|l
 const AGENCY = /marketing|advertising|web design|website design|seo|digital agency|lead gen|media agency|branding/i;
 const PRACTICE = { family: /family|divorce|custody/i, immigration: /immigration/i, pi: /personal injury|accident|injury/i };
 
+import { agencyScore } from './agency/audit.mjs';
+
 export function score(p, product) {
+  if (product.rules?.agency) { const r = agencyScore(p); return { score: r.score, score_why: r.score_why }; }
   const s = p.signals || {}, x = p.extra || {}, why = [];
   let n = 0;
   const add = (pts, reason) => { n += pts; why.push(`${pts > 0 ? '+' : ''}${pts} ${reason}`); };

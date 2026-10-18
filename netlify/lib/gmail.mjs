@@ -43,20 +43,21 @@ async function call(inbox, path, opts = {}) {
 
 const encWord = s => /^[\x20-\x7e]*$/.test(s) ? s : '=?UTF-8?B?' + Buffer.from(s).toString('base64') + '?=';
 
-export function buildMime({ from, fromName, to, subject, body, inReplyTo, messageId }) {
+export function buildMime({ from, fromName, to, subject, body, inReplyTo, messageId, replyTo }) {
   const h = [
     fromName ? `From: ${encWord(fromName)} <${from}>` : `From: ${from}`, `To: ${to}`, `Subject: ${encWord(subject)}`,
     `Message-ID: ${messageId}`, `Date: ${new Date().toUTCString()}`, 'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64',
   ];
   if (inReplyTo) h.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
+  if (replyTo && /^[^\s<>@,]+@[^\s<>@,]+$/.test(replyTo)) h.push(`Reply-To: ${replyTo}`);
   const b = Buffer.from(body.replace(/\r?\n/g, '\r\n')).toString('base64').replace(/.{76}/g, '$&\r\n');
   return b64url(h.join('\r\n') + '\r\n\r\n' + b);
 }
 
 export async function send(inbox, m) {
   const messageId = `<${crypto.randomUUID()}@${inbox.split('@')[1]}>`;
-  const raw = buildMime({ from: inbox, fromName: m.fromName, to: m.to, subject: m.subject, body: m.body, inReplyTo: m.inReplyTo, messageId });
+  const raw = buildMime({ from: inbox, fromName: m.fromName, to: m.to, subject: m.subject, body: m.body, inReplyTo: m.inReplyTo, messageId, replyTo: m.replyTo });
   const sent = await call(inbox, 'messages/send', { method: 'POST', body: JSON.stringify(m.threadId ? { raw, threadId: m.threadId } : { raw }) });
   let real = messageId;
   try {
