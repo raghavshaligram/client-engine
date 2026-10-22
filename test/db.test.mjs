@@ -29,3 +29,10 @@ test('database errors explained', () => {
   assert.match(explainDbError('Database POST products: new row violates row-level security policy'), /public \(anon or publishable\) key/);
   assert.match(explainDbError('Database GET products: Invalid API key'), /didn't accept SUPABASE_SERVICE_KEY/);
 });
+
+test('key kind is reported without revealing the key', async () => {
+  const { keyKind } = await import('../netlify/lib/actions.mjs');
+  const jwt = r => 'x.' + Buffer.from(JSON.stringify({ role: r })).toString('base64url') + '.y';
+  assert.equal(keyKind('sb_secret_abc'), 'secret'); assert.equal(keyKind('sb_publishable_abc'), 'publishable');
+  assert.equal(keyKind(jwt('service_role')), 'service_role'); assert.equal(keyKind(jwt('anon')), 'anon'); assert.equal(keyKind(''), 'none');
+});

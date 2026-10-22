@@ -241,7 +241,8 @@ VIEWS.setup = async () => {
   const otherErr = s.dbError && !needDb && !noTables;
   $('#view').innerHTML = `
     <div class="note warn"><b>The database isn't connected yet, so there's nothing to show.</b> ${s.dbError ? esc(s.dbError) : ''}
-      ${s.dbRaw && s.dbRaw !== s.dbError ? `<div class="small mono" style="margin-top:6px;opacity:.8">Supabase said: ${esc(s.dbRaw)}</div>` : ''}</div>
+      ${s.dbRaw && s.dbRaw !== s.dbError ? `<div class="small mono" style="margin-top:6px;opacity:.8">Supabase said: ${esc(s.dbRaw)}</div>` : ''}
+      ${s.keyKind ? `<div class="small" style="margin-top:6px">The app is using project <b>${esc(s.dbHost || '?')}</b> with a <b>${{ secret: 'secret key (correct)', service_role: 'service_role key (correct)', publishable: 'publishable key (wrong: use the secret key)', anon: 'anon key (wrong: use the secret or service_role key)', none: 'missing key', unknown: 'key it does not recognise' }[s.keyKind]}</b>.</div>` : ''}</div>
     <div class="card"><h2>Steps</h2>
       <table>
         <tr><td>1. Create a Supabase project (separate from your other apps)</td><td>${needDb ? '<span class="pill">Can\'t tell yet</span>' : '<span class="pill good">Done</span>'}</td></tr>

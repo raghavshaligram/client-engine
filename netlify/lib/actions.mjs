@@ -1,6 +1,6 @@
 // Everything the app can do. Used by /api (the screen) and by the autopilot schedules.
 import crypto from 'node:crypto';
-import { db } from './db.mjs';
+import { db, projectUrl } from './db.mjs';
 import { SEED_PRODUCTS, RADAR_DEFAULTS } from './products.mjs';
 import { fromMapsRow, fromRegistryRow, lower } from './clean.mjs';
 import { scanSite } from './scan.mjs';
@@ -36,6 +36,14 @@ export async function autopilotState(p) {
   const editRate = recent.length ? recent.filter(m => m.edited).length / recent.length : 1;
   const on = mode === 'on' || (mode === 'auto' && mine.length >= LEARN_APPROVALS && editRate < LEARN_EDIT_RATE);
   return { mode, on, approvedByYou: mine.length, needed: LEARN_APPROVALS, editRate: recent.length ? Math.round(editRate * 100) : null };
+}
+
+// Which kind of Supabase key the server was given, without revealing it.
+export function keyKind(k = String(process.env.SUPABASE_SERVICE_KEY || '').trim()) {
+  if (!k) return 'none';
+  if (k.startsWith('sb_secret_')) return 'secret';
+  if (k.startsWith('sb_publishable_')) return 'publishable';
+  try { const role = JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString()).role; return role === 'service_role' ? 'service_role' : role === 'anon' ? 'anon' : 'unknown'; } catch { return 'unknown'; }
 }
 
 // Database errors in plain words, with the fix.
@@ -163,7 +171,7 @@ export const actions = {
         hoa.segments = segments;
       }
     } catch (e) {
-      return { env, dbError: explainDbError(e.message), dbRaw: e.message };
+      return { env, dbError: explainDbError(e.message), dbRaw: e.message, keyKind: keyKind(), dbHost: (() => { try { return new URL(projectUrl()).host; } catch { return ''; } })() };
     }
     return { env, products, senders: await senders(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' };
   },
