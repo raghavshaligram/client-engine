@@ -176,6 +176,12 @@ const TITLES = { today: 'Today', find: 'Find people', prospects: 'Prospects', qu
 async function go(view) {
   S.view = view; store.set('view', view);
   $('#nav').querySelectorAll('button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+  // Until the database is connected, every screen shows what's left to set up.
+  if (!S.products.length) {
+    $('#title').textContent = 'Finish setup'; $('#productSeg').classList.add('hide');
+    try { await VIEWS.setup(); } catch (e) { $('#view').innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
+    return;
+  }
   $('#title').textContent = TITLES[view];
   $('#productSeg').classList.toggle('hide', view === 'settings');
   $('#view').innerHTML = '<div class="empty">Loading…</div>';
@@ -183,6 +189,7 @@ async function go(view) {
 }
 
 async function refreshBadges() {
+  if (!S.products.length) return;
   try {
     const [q, r, c] = await Promise.all([api('queue.list', { productId: S.product }), api('replies.list', { productId: S.product }), api('radar.queue', { productId: S.product })]);
     const nq = q.messages.length, nr = r.replies.length, nc = c.rows.length;
@@ -218,8 +225,37 @@ function parseCSV(text, delim) {
 }
 const readFile = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsText(f); });
 
-// ---------------------------------------------------------------- Today
+// ---------------------------------------------------------------- Setup (database not connected yet)
 const VIEWS = {};
+const ENV_HELP = {
+  APP_KEY: ['The password for this app', true], SUPABASE_URL: ['Supabase > Project settings > API > Project URL', true],
+  SUPABASE_SERVICE_KEY: ['Supabase > Project settings > API > the service_role key (secret)', true],
+  OPENAI_API_KEY: ['Writes and checks the emails', true], GOOGLE_SA_EMAIL: ['Google service account that sends from your Workspace inboxes', false],
+  GOOGLE_SA_KEY: ["That service account's private key", false], DIGEST_TO: ['Your own address, for the 9am summary', false],
+  PURCHASE_SECRET: ['Lets your products report signups and sales', false], XAI_API_KEY: ['Grok, for Conversations', false],
+};
+VIEWS.setup = async () => {
+  const s = S.setup || {}, env = s.env || {};
+  const needDb = !env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY;
+  const noTables = /schema\.sql|Tables not found/i.test(s.dbError || '');
+  $('#view').innerHTML = `
+    <div class="note warn"><b>The database isn't connected yet, so there's nothing to show.</b> ${s.dbError ? esc(s.dbError) : ''}</div>
+    <div class="card"><h2>Steps</h2>
+      <table>
+        <tr><td>1. Create a Supabase project (separate from your other apps)</td><td>${needDb ? '<span class="pill warn">To do</span>' : '<span class="pill good">Done</span>'}</td></tr>
+        <tr><td>2. In Netlify, add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code>, scope including Functions, then Deploys > Trigger deploy</td><td>${needDb ? '<span class="pill warn">To do</span>' : '<span class="pill good">Done</span>'}</td></tr>
+        <tr><td>3. In Supabase, SQL Editor > New query: paste all of <code>schema.sql</code> from the GitHub repo and press Run</td><td>${needDb ? '<span class="pill">After step 2</span>' : noTables ? '<span class="pill warn">To do</span>' : s.dbError ? '<span class="pill bad">Check the error above</span>' : '<span class="pill good">Done</span>'}</td></tr>
+        <tr><td>4. Press Check again</td><td><button class="btn small primary" id="recheck">Check again</button></td></tr>
+      </table>
+    </div>
+    <div class="card"><h2>Netlify variables</h2>
+      <table>${Object.entries(ENV_HELP).map(([k, [help, req]]) => `<tr><td><code>${k}</code></td><td>${env[k] ? '<span class="pill good">Set</span>' : req ? '<span class="pill bad">Missing</span>' : '<span class="pill">Later</span>'}</td><td class="small muted">${help}</td></tr>`).join('')}</table>
+      <p class="small muted">After adding or changing a variable, redeploy (Deploys > Trigger deploy > Deploy site). Variables reach the app only after a new deploy.</p>
+    </div>`;
+  $('#recheck').onclick = async () => { $('#recheck').disabled = true; await boot(); };
+};
+
+// ---------------------------------------------------------------- Today
 VIEWS.today = async () => {
   const p = product();
   const [st, q, r, pl, ap] = await Promise.all([

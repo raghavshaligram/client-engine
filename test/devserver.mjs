@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fakeDb, fakeOpenAI, installFetch } from './fakes.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-process.env.SUPABASE_URL = 'https://fake.supabase.co';
+process.env.SUPABASE_URL = process.env.NO_SUPABASE ? '' : 'https://fake.supabase.co';
 process.env.SUPABASE_SERVICE_KEY = 'svc';
 process.env.OPENAI_API_KEY = 'sk-test';
 process.env.APP_KEY = 'test-key';
