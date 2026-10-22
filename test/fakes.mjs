@@ -7,9 +7,11 @@ const DEFAULTS = {
   messages: { status: 'draft', edited: false },
   replies: { handled: false },
   suppression: {}, settings: {}, scrape_queries: {}, warmup: { cleaned: false, error: null, replied_at: null, landed_spam: null },
+  conversations: { status: 'new', score: 0, clicks: 0, signups: 0, purchases: 0, link_included: false, sent_at: null },
+  radar_seen: {},
 };
-const KEYS = { products: ['id'], prospects: ['id'], messages: ['id'], replies: ['id'], suppression: ['email'], settings: ['key'], scrape_queries: ['id'], warmup: ['id'] };
-const UNIQUE = { prospects: [['product_id', 'email']], replies: [['gmail_id']], scrape_queries: [['product_id', 'query']] };
+const KEYS = { products: ['id'], prospects: ['id'], messages: ['id'], replies: ['id'], suppression: ['email'], settings: ['key'], scrape_queries: ['id'], warmup: ['id'], conversations: ['id'], radar_seen: ['url'] };
+const UNIQUE = { prospects: [['product_id', 'email']], replies: [['gmail_id']], scrape_queries: [['product_id', 'query']], conversations: [['slug']] };
 
 export function fakeDb() {
   const T = Object.fromEntries(Object.keys(DEFAULTS).map(t => [t, []]));

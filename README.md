@@ -14,6 +14,7 @@ Finds prospects for PDFMacro, KeepHOA and RingSparrow, reads their websites, wri
 | Warm up new inboxes | Netlify, `autopilot-send` | 14 days of inbox-to-inbox emails and replies, then it keeps going at 8 a day |
 | Send and follow up | Netlify, `autopilot-send` | Every 10 minutes, weekdays 8am to 5pm US Central. Cold email starts at 5 a day after warm-up and rises by 2 every 3 days up to your maximum |
 | Read replies | Netlify, `autopilot-send` | Every 10 minutes. Opt-outs, bounces and "not now" are handled; interested replies email you straight away |
+| Conversations: find people asking for help | Netlify, `radar-schedule` → `radar-scan-background` | Every 6 hours (Settings). Grok searches Reddit, forums, X, LinkedIn, Hacker News, Bluesky; you post the replies yourself |
 | Morning summary | Netlify, `autopilot-digest` | 9:00am India time |
 | Mark customers | Your products' licence servers call `purchase.record` | On each purchase |
 
@@ -65,6 +66,8 @@ This lets the app send as your inboxes with no sign-in that expires and no Googl
 | `GOOGLE_SA_KEY` | From step 2 |
 | `DIGEST_TO` | Your own email address, for the 9am summary and hot-lead alerts |
 | `PURCHASE_SECRET` | Another long password you make up, for purchase reports (step 6) |
+| `XAI_API_KEY` | For Conversations. From console.x.ai → API keys |
+| `BSKY_HANDLE`, `BSKY_APP_PASSWORD` | Optional, turn on Bluesky search (an app password from Bluesky settings) |
 | `OPENAI_MODEL` | Optional. Defaults to `gpt-4.1-mini`; set any chat model your key can use. |
 | `GOOGLE_CLIENT_ID` | Optional, only for browser-sending inboxes |
 
@@ -104,6 +107,29 @@ That secret can only mark purchases; it opens nothing else.
 
 The scraper is [gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper) (MIT). Scraping Google Maps breaks Google's terms; the practical risk is Google blocking your IP for a while, so keep runs small.
 
+## Conversations (merged from Launch Radar)
+Finds people who are asking for help right now and drafts a reply for you to post yourself. It never posts, so your accounts stay safe.
+- **Per product**, under Products → Conversations: switch it on, choose where to look, the phrases people would type, subreddits, forum sites and your voice. KeepHOA starts on, with Reddit (r/HOA, r/condo and others) and Quora. PDFMacro and RingSparrow start off.
+- **Replies come from the product file**, so they can't claim more than it does, and the Never say list applies. On Reddit and Hacker News they help first and leave the link out unless someone asks for a tool.
+- **Conversations screen:** copy the reply and open the post (on X it opens a pre-filled reply), post it, tap "Yes, posted". Skip with a reason, or ask for a rewrite ("shorter", "no link"). A daily limit per site (10) keeps you from looking spammy.
+- **Tracked links:** `{{LINK}}` becomes `your-site/go/<code>`, which counts real clicks (not link-preview bots) and sends people to the product with `?ref=ce_<code>`.
+- **Costs:** Grok bills X search per post read and web search per call. Settings → Conversations has hard monthly caps; at the defaults expect roughly $15 a month with X on, less without it.
+
+**Counting signups and sales from a conversation.** On your product's landing page, keep the ref; send it with the signup or purchase:
+```js
+// landing page
+const ref = new URLSearchParams(location.search).get('ref');
+if (ref?.startsWith('ce_')) localStorage.setItem('ce_ref', ref);
+
+// your server, after a signup
+await fetch('https://YOUR-CLIENT-ENGINE.netlify.app/api', { method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'x-purchase-secret': process.env.CLIENT_ENGINE_PURCHASE_SECRET },
+  body: JSON.stringify({ action: 'signup.record', ref: user.ceRef }) }).catch(() => {});
+// after a purchase: add the ref to the purchase.record call from step 6
+//   body: JSON.stringify({ action: 'purchase.record', email, product: 'keephoa', ref: user.ceRef })
+```
+Results shows clicks, signups and sales by site, and the replies that worked.
+
 ## Warm-up, in detail
 - Day 1 to 14: each inbox writes 3 emails a day, rising to 15, to inboxes on your other domains, during US business hours. Plain, varied notes with no links and no product talk.
 - Every warm-up email gets a reply 20 to 120 minutes later. If one landed in spam, the receiving inbox moves it to the inbox and marks it important first. Both sides are then marked read and archived, so your inboxes stay clean.
@@ -126,6 +152,6 @@ The scraper is [gosom/google-maps-scraper](https://github.com/gosom/google-maps-
 
 ## Tests
 ```
-node --test test/flow.test.mjs test/autopilot.test.mjs   # server, including the autopilot, Workspace sending and digest
+node --test test/*.test.mjs            # server: email engine, autopilot, warm-up, state sources, Conversations
 python3 test/browser_test.py /tmp     # clicks through the whole app with Google and Gmail mocked
 ```

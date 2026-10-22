@@ -17,10 +17,11 @@ export const config = { path: '/api' };
 
 export default async (req) => {
   if (req.method !== 'POST') return fail('POST only', 405);
+  if (!process.env.URL) { try { process.env.URL = new URL(req.url).origin; } catch {} } // for tracked links and background scans
   if (!process.env.APP_KEY) return fail('APP_KEY is not set in Netlify environment variables', 500);
   let body;
   try { body = await req.json(); } catch { return fail('Bad JSON'); }
-  const ok = authorised(req) || (body.action === 'purchase.record' && purchaseAuthorised(req));
+  const ok = authorised(req) || (['purchase.record', 'signup.record'].includes(body.action) && purchaseAuthorised(req));
   if (!ok) return fail('Wrong app key', 401);
   if (manual[body.action]) { try { return json({ log: await manual[body.action]() }); } catch (e) { return fail(e.message, 500); } }
   const fn = actions[body.action];

@@ -155,3 +155,36 @@ create table if not exists warmup (
 );
 create index if not exists warmup_from on warmup(from_addr, sent_at);
 alter table warmup enable row level security;
+
+-- Conversations (from Launch Radar): posts where people ask for help, with a drafted reply you post yourself.
+alter table products add column if not exists radar jsonb not null default '{}';
+create table if not exists conversations (
+  id text primary key,                 -- hash of the post URL
+  product_id text not null references products(id) on delete cascade,
+  platform text not null,              -- reddit | forums | x | linkedin | hn | bluesky
+  url text not null,
+  author text,
+  text text,
+  posted_at text,
+  score int not null default 0,
+  reason text,
+  status text not null default 'new',  -- new | sent | skipped
+  draft text,
+  link_included boolean not null default false,
+  slug text unique,                    -- the tracked link: /go/<slug>
+  target text,                         -- where /go/<slug> sends people
+  skip_reason text,
+  clicks int not null default 0,
+  signups int not null default 0,
+  purchases int not null default 0,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+create index if not exists conversations_queue on conversations(product_id, status, score desc);
+create table if not exists radar_seen (
+  url text primary key,
+  product_id text,
+  created_at timestamptz not null default now()
+);
+alter table conversations enable row level security;
+alter table radar_seen enable row level security;

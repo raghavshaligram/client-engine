@@ -108,6 +108,7 @@ code{font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:1px
     <button data-view="queue">Queue <span class="count hide" id="nQueue"></span></button>
     <button data-view="send">Send</button>
     <button data-view="replies">Replies <span class="count hide" id="nReplies"></span></button>
+    <button data-view="conversations">Conversations <span class="count hide" id="nConv"></span></button>
     <button data-view="results">Results</button>
     <div class="grow"></div>
     <button data-view="products">Products</button>
@@ -171,7 +172,7 @@ function renderProductSeg() {
 }
 $('#nav').querySelectorAll('button[data-view]').forEach(b => b.onclick = () => go(b.dataset.view));
 
-const TITLES = { today: 'Today', find: 'Find people', prospects: 'Prospects', queue: 'Queue', send: 'Send', replies: 'Replies', results: 'Results', products: 'Products', settings: 'Settings' };
+const TITLES = { today: 'Today', find: 'Find people', prospects: 'Prospects', queue: 'Queue', send: 'Send', replies: 'Replies', conversations: 'Conversations', results: 'Results', products: 'Products', settings: 'Settings' };
 async function go(view) {
   S.view = view; store.set('view', view);
   $('#nav').querySelectorAll('button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
@@ -183,8 +184,9 @@ async function go(view) {
 
 async function refreshBadges() {
   try {
-    const [q, r] = await Promise.all([api('queue.list', { productId: S.product }), api('replies.list', { productId: S.product })]);
-    const nq = q.messages.length, nr = r.replies.length;
+    const [q, r, c] = await Promise.all([api('queue.list', { productId: S.product }), api('replies.list', { productId: S.product }), api('radar.queue', { productId: S.product })]);
+    const nq = q.messages.length, nr = r.replies.length, nc = c.rows.length;
+    $('#nConv').textContent = nc; $('#nConv').classList.toggle('hide', !nc);
     $('#nQueue').textContent = nq; $('#nQueue').classList.toggle('hide', !nq);
     $('#nReplies').textContent = nr; $('#nReplies').classList.toggle('hide', !nr);
   } catch {}
@@ -257,6 +259,7 @@ VIEWS.today = async () => {
       <p class="sub">Everything else runs on its own.</p>
       <table>
         <tr><td>Answer replies <span class="muted small">(answers are drafted for you)</span></td><td class="num"><button class="btn small primary" data-go="replies">Open replies (${r.replies.length})</button></td></tr>
+        ${p.radar?.on ? `<tr><td>Post replies to people asking for help <span class="muted small">(drafted for you; you post them)</span></td><td class="num"><button class="btn small" data-go="conversations">Open Conversations</button></td></tr>` : ''}
         <tr><td>${a.on ? `Drafts the checker scored under 8 <span class="muted small">(optional: approve, fix or drop)</span>` : `Read and approve drafts <span class="muted small">(this is how it learns your voice)</span>`}</td><td class="num"><button class="btn small" data-go="queue">Open queue (${drafts})</button></td></tr>
         ${mySenders.some(s => s.mode === 'browser') ? `<tr><td>Send from your browser inboxes <span class="muted small">(keep the tab open)</span></td><td class="num"><button class="btn small" data-go="send">Open sending</button></td></tr>` : ''}
       </table>
@@ -785,11 +788,148 @@ VIEWS.replies = async () => {
   });
 };
 
+// ---------------------------------------------------------------- Conversations
+const PLATFORM = { reddit: 'Reddit', forums: 'Forums', x: 'X', linkedin: 'LinkedIn', hn: 'Hacker News', bluesky: 'Bluesky' };
+const SKIP_REASONS = ['Not relevant', 'Too old', 'A company or self-promo', 'Wrong audience', 'Already handled'];
+const finalText = r => String(r.draft || '').replace(/\{\{LINK\}\}/g, r.link).replace(/[ \t]+\n/g, '\n').trim();
+function replyUrl(r) {
+  if (r.platform === 'x') { const id = (r.url.match(/status\/(\d+)/) || [])[1]; if (id) return `https://x.com/intent/tweet?in_reply_to=${id}&text=${encodeURIComponent(finalText(r))}`; }
+  return r.url;
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch {}
+  try { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch { return false; }
+}
+const ago = d => { if (!d) return ''; const h = (Date.now() - Date.parse(d)) / 3600000; return h < 1 ? 'just now' : h < 24 ? `${Math.round(h)}h ago` : `${Math.round(h / 24)}d ago`; };
+
+VIEWS.conversations = async () => {
+  const p = product();
+  const tab = store.get('ctab', 'new');
+  const [q, st] = await Promise.all([api('radar.queue', { productId: p.id, status: tab }), api('radar.status')]);
+  const rd = p.radar || {};
+  const on = Object.entries(rd.sources || {}).filter(([, v]) => v).map(([k]) => PLATFORM[k]);
+  const caps = Object.entries(q.sentToday).filter(([, n]) => n > 0);
+  $('#view').innerHTML = `
+    ${!st.xai ? `<div class="note warn">Add <code>XAI_API_KEY</code> in Netlify to start looking for conversations.</div>` : ''}
+    ${!rd.on ? `<div class="note">Conversations are off for ${esc(p.name)}. Turn them on under <a href="#" data-go="products">Products</a>.</div>` : ''}
+    <div class="card">
+      <div class="row"><div class="grow-text" style="flex:1"><h2>People asking for help</h2>
+        <p class="sub" style="margin:0">${rd.on ? `Looking on ${on.join(', ') || 'no sites yet'} every ${st.settings.scanEveryHours} hours. ` : ''}Each one comes with a reply drafted from your product file. You post it yourself, so your accounts stay safe.</p></div>
+        <button class="btn primary" id="cScan" ${st.scan.running || !st.xai ? 'disabled' : ''}>${st.scan.running ? 'Looking…' : 'Look now'}</button></div>
+      ${rd.lastScanAt ? `<p class="small muted" style="margin:8px 0 0">Last looked ${ago(rd.lastScanAt)}: ${esc(rd.lastScanSummary || '')}</p>` : ''}
+      <div id="cLog" class="log ${st.scan.running || st.scan.error ? '' : 'hide'}" style="margin-top:10px">${esc((st.scan.log || []).join('\n'))}${st.scan.error ? '\nError: ' + esc(st.scan.error) : ''}</div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <div class="seg">${[['new', 'To reply'], ['sent', 'Replied'], ['skipped', 'Skipped']].map(([k, l]) => `<button data-t="${k}" class="${k === tab ? 'on' : ''}">${l} (${q.counts[k] || 0})</button>`).join('')}</div>
+      <span style="flex:1"></span>${caps.map(([k, n]) => `<span class="pill ${n >= q.dailyCap ? 'warn' : ''}">${PLATFORM[k]} ${n}/${q.dailyCap} today</span>`).join(' ')}
+    </div>
+    <div id="cList">${q.rows.length ? q.rows.map(r => convCard(r, tab, (q.sentToday[r.platform] || 0) >= q.dailyCap)).join('') : `<div class="card empty">${tab === 'new' ? 'Nobody waiting. New conversations appear after each look.' : 'Nothing here yet.'}</div>`}</div>`;
+  wireGo();
+  $('#view').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { store.set('ctab', b.dataset.t); go('conversations'); });
+  $('#cScan').onclick = () => startLook(p);
+  if (st.scan.running) pollLook();
+  wireConvCards(q.rows);
+};
+
+function convCard(r, tab, overCap) {
+  const lim = r.platform === 'x' || r.platform === 'bluesky' ? 280 : 0;
+  const len = finalText(r).length;
+  return `<div class="card" data-id="${r.id}">
+    <div class="row"><span class="pill ${r.score >= 85 ? 'good' : r.score >= 70 ? 'warn' : ''}">${r.score}</span><b>${PLATFORM[r.platform]}</b><span class="muted small">@${esc(r.author)}${r.posted_at ? ' · ' + esc(r.posted_at) : ''}</span>
+      <span style="flex:1"></span><a class="small" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Open post</a></div>
+    <p class="small muted" style="margin:8px 0 4px">${esc(r.reason)}</p>
+    <div style="white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:10px;font-size:14px">${esc(r.text)}</div>
+    ${tab === 'new' ? `
+      <label>Your reply <small>${r.draft.includes('{{LINK}}') ? '{{LINK}} becomes your tracked link' : 'No link: help only'}${lim ? ` · <span data-len>${len}</span>/${lim}` : ''}</small></label>
+      <textarea class="mail" data-f="draft" style="min-height:120px">${esc(r.draft)}</textarea>
+      ${overCap ? `<p class="small" style="color:var(--warn)">You've hit today's ${PLATFORM[r.platform]} limit. More replies today can look spammy; this one can wait.</p>` : ''}
+      <div class="row" style="margin-top:10px" data-mode="idle">
+        <button class="btn primary" data-a="reply">${r.platform === 'x' ? 'Reply on X' : 'Copy and open the post'}</button>
+        <button class="btn" data-a="redraft">Write again</button>
+        <span style="flex:1"></span><button class="btn" data-a="skip">Skip</button>
+      </div>
+      <div class="row hide" style="margin-top:10px" data-mode="confirm"><span>Did you post it?</span><button class="btn primary" data-a="sent">Yes, posted</button><button class="btn" data-a="back">Not yet</button></div>
+      <div class="row hide" style="margin-top:10px" data-mode="skip">${SKIP_REASONS.map(x => `<button class="btn small" data-a="skipwhy" data-why="${esc(x)}">${esc(x)}</button>`).join('')}<button class="btn small" data-a="back">Cancel</button></div>
+      <div class="row hide" style="margin-top:10px" data-mode="redraft"><input data-f="note" placeholder="What to change, e.g. shorter, no link, more practical" style="flex:1"><button class="btn primary" data-a="redraftgo">Rewrite</button><button class="btn" data-a="back">Cancel</button></div>`
+    : `<p class="small" style="margin-top:10px">${tab === 'sent' ? `Posted ${ago(r.sent_at)} · <b>${r.clicks}</b> clicks · <b>${r.signups}</b> signups · <b>${r.purchases}</b> sales` : `Skipped: ${esc(r.skip_reason || '')}`}</p>
+       <details class="small"><summary>Your reply</summary><p style="white-space:pre-wrap">${esc(finalText(r))}</p></details>
+       ${tab === 'skipped' ? `<button class="btn small" data-a="unskip">Bring back</button>` : ''}`}
+  </div>`;
+}
+
+function wireConvCards(rows) {
+  document.querySelectorAll('#cList .card[data-id]').forEach(card => {
+    const r = rows.find(x => x.id === card.dataset.id);
+    const mode = m => card.querySelectorAll('[data-mode]').forEach(el => el.classList.toggle('hide', el.dataset.mode !== m));
+    const ta = card.querySelector('[data-f=draft]');
+    const cur = () => ({ ...r, draft: ta ? ta.value : r.draft });
+    if (ta) {
+      ta.oninput = () => { const l = card.querySelector('[data-len]'); if (l) l.textContent = finalText(cur()).length; };
+      ta.onchange = () => api('radar.update', { id: r.id, draft: ta.value }).catch(() => {});
+    }
+    card.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+      const a = b.dataset.a;
+      try {
+        if (a === 'reply') {
+          const ok = await copyText(finalText(cur()));
+          window.open(replyUrl(cur()), '_blank', 'noopener');
+          toast(r.platform === 'x' ? "Reply opened on X. It's also copied." : ok ? 'Reply copied. Paste it on the post.' : "Couldn't copy; select the text and copy it.");
+          if (ta && ta.value !== r.draft) await api('radar.update', { id: r.id, draft: ta.value });
+          mode('confirm');
+        }
+        if (a === 'back') mode('idle');
+        if (a === 'skip') mode('skip');
+        if (a === 'redraft') { mode('redraft'); card.querySelector('[data-f=note]').focus(); }
+        if (a === 'sent') { await api('radar.update', { id: r.id, status: 'sent', draft: ta ? ta.value : undefined }); toast('Marked as posted.'); go('conversations'); refreshBadges(); }
+        if (a === 'skipwhy') { await api('radar.update', { id: r.id, status: 'skipped', skipReason: b.dataset.why }); go('conversations'); refreshBadges(); }
+        if (a === 'unskip') { await api('radar.update', { id: r.id, status: 'new' }); go('conversations'); refreshBadges(); }
+        if (a === 'redraftgo') {
+          b.disabled = true; b.textContent = 'Rewriting…';
+          const out = await api('radar.redraft', { id: r.id, note: card.querySelector('[data-f=note]').value.trim() });
+          r.draft = out.row.draft; ta.value = out.row.draft; ta.oninput(); mode('idle');
+          b.disabled = false; b.textContent = 'Rewrite';
+        }
+      } catch (e) { toast(e.message, 6000); b.disabled = false; }
+    });
+  });
+}
+
+async function startLook(p) {
+  const btn = $('#cScan'); btn.disabled = true; btn.textContent = 'Looking…';
+  const log = $('#cLog'); log.classList.remove('hide'); log.textContent = 'Starting…';
+  try {
+    const r = await api('radar.scan', { productId: p.id });
+    if (r.started) return pollLook();
+    // No background functions on this Netlify plan: one site at a time from this tab.
+    const sites = Object.entries(p.radar?.sources || {}).filter(([, v]) => v).map(([k]) => k);
+    for (let i = 0; i < sites.length; i++) {
+      log.textContent += `\nLooking on ${PLATFORM[sites[i]]}…`;
+      const x = await api('radar.scanInline', { productId: p.id, platform: sites[i], first: i === 0, last: i === sites.length - 1 });
+      log.textContent += ` ${x.added} new`;
+    }
+    await reloadProducts(); go('conversations'); refreshBadges();
+  } catch (e) { log.textContent += '\nError: ' + e.message; btn.disabled = false; btn.textContent = 'Look now'; }
+}
+async function pollLook() {
+  clearTimeout(pollLook.t);
+  if (S.view !== 'conversations') return;
+  const st = await api('radar.status').catch(() => null);
+  const log = $('#cLog');
+  if (st && log) log.textContent = (st.scan.log || []).join('\n') || 'Starting…';
+  if (st && st.scan.running) { pollLook.t = setTimeout(pollLook, 4000); return; }
+  await reloadProducts(); if (S.view === 'conversations') go('conversations'); refreshBadges();
+}
+
 // ---------------------------------------------------------------- Results
 VIEWS.results = async () => {
   const p = product();
-  const st = await api('stats', { productId: p.id });
+  const [st, cs] = await Promise.all([api('stats', { productId: p.id }), api('radar.stats', { productId: p.id })]);
   const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '';
+  const PL = { reddit: 'Reddit', forums: 'Forums', x: 'X', linkedin: 'LinkedIn', hn: 'Hacker News', bluesky: 'Bluesky' };
+  const convCard = `<div class="card"><h2>Conversations</h2><p class="sub">Replies you posted yourself, and what they brought in. Clicks count real people only; signups and sales come from your product's webhook.</p>
+    ${Object.keys(cs.byPlatform).length ? `<table><tr><th></th><th class="num">Found</th><th class="num">Replied</th><th class="num">Clicks</th><th class="num">Signups</th><th class="num">Bought</th></tr>
+      ${Object.entries(cs.byPlatform).map(([k, v]) => `<tr><td>${PL[k] || esc(k)}</td><td class="num">${v.found}</td><td class="num">${v.sent}</td><td class="num">${v.clicks}</td><td class="num">${v.signups}</td><td class="num">${v.purchases}</td></tr>`).join('')}</table>` : '<p class="muted">No conversations yet.</p>'}
+    ${cs.best.length ? `<h3>Replies that worked</h3><table>${cs.best.map(b => `<tr><td class="small"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${PL[b.platform] || ''} · @${esc(b.author)}</a><br><span class="muted">${esc(String(b.draft || '').slice(0, 160))}</span></td><td class="num small">${b.clicks} clicks · ${b.signups} signups · ${b.purchases} sales</td></tr>`).join('')}</table>` : ''}</div>`;
   const tbl = (title, g, note) => `<div class="card"><h2>${title}</h2>${note ? `<p class="sub">${note}</p>` : ''}
     ${Object.keys(g).length ? `<table><tr><th></th><th class="num">People</th><th class="num">Replied</th><th class="num">Interested</th><th class="num">Bought</th><th class="num">Bounced</th></tr>
     ${Object.entries(g).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.people}</td><td class="num">${v.replied} <span class="muted">${pct(v.replied, v.people)}</span></td><td class="num">${v.positive} <span class="muted">${pct(v.positive, v.people)}</span></td><td class="num">${v.won}</td><td class="num">${v.bounced} <span class="muted">${pct(v.bounced, v.people)}</span></td></tr>`).join('')}</table>` : '<p class="muted">Nothing sent yet.</p>'}</div>`;
@@ -809,13 +949,15 @@ VIEWS.results = async () => {
     </table></div>
     ${tbl('By angle', byAngle, 'Every angle gets about 100 sends before the learner shifts toward the winner.')}
     ${tbl('By segment', st.bySegment)}
-    ${tbl('By score', st.byScore, 'If high scores don\'t reply more than low ones, the scoring needs adjusting.')}`;
+    ${tbl('By score', st.byScore, 'If high scores don\'t reply more than low ones, the scoring needs adjusting.')}
+    ${convCard}`;
 };
 
 // ---------------------------------------------------------------- Products
 VIEWS.products = async () => {
   const p = product();
   const f = (k, l, help, rows) => `<label>${l} <small>${help || ''}</small></label><textarea data-k="${k}" style="min-height:${rows || 80}px">${esc(p[k] || '')}</textarea>`;
+  const rd = p.radar || {};
   $('#view').innerHTML = `
     ${p.paused ? `<div class="note bad"><b>Paused.</b> ${esc(p.paused_reason || '')} <button class="btn small" id="resume">Resume sending</button></div>` : ''}
     <div class="card">
@@ -839,6 +981,23 @@ VIEWS.products = async () => {
       <label>Segments</label><textarea class="mono" data-j="segments" style="min-height:140px">${esc(JSON.stringify(p.segments, null, 2))}</textarea>
       <label>Rules <small>steps; gaps in days from the first email; word and link limits per email; minimum score</small></label><textarea class="mono" data-j="rules" style="min-height:140px">${esc(JSON.stringify(p.rules, null, 2))}</textarea>
     </div>
+    <div class="card" id="radarCard">
+      <h2>Conversations</h2>
+      <p class="sub">Where to look for people asking for help, and what they'd type. Replies use the product file above, so they can't claim more than it does.</p>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" data-r="on" style="width:auto" ${rd.on ? 'checked' : ''}> Look for conversations for ${esc(p.name)}</label>
+      <label>Where to look</label>
+      <div class="row">${[['reddit', 'Reddit'], ['forums', 'Forums'], ['x', 'X'], ['linkedin', 'LinkedIn'], ['hn', 'Hacker News'], ['bluesky', 'Bluesky']].map(([k, l]) => `<label style="display:flex;gap:6px;align-items:center;font-weight:400;margin:0"><input type="checkbox" data-src="${k}" style="width:auto" ${rd.sources?.[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+      <div class="grid2">
+        <div><label>What they'd type <small>one phrase per line, in their words</small></label><textarea data-r="keywords" style="min-height:150px">${esc((rd.keywords || []).join('\n'))}</textarea></div>
+        <div><label>Subreddits <small>one per line, without r/</small></label><textarea data-r="subreddits" style="min-height:110px">${esc((rd.subreddits || []).join('\n'))}</textarea>
+          <label>Forum sites <small>up to 5 domains</small></label><textarea data-r="forumDomains" style="min-height:50px">${esc((rd.forumDomains || []).join('\n'))}</textarea></div>
+      </div>
+      <div class="grid2">
+        <div><label>What they use today <small>competitors and workarounds, one per line</small></label><textarea data-r="competitors" style="min-height:70px">${esc((rd.competitors || []).join('\n'))}</textarea></div>
+        <div><label>Your voice <small>paste 2 or 3 things you've written, so replies sound like you</small></label><textarea data-r="voice" style="min-height:70px">${esc(rd.voice || '')}</textarea></div>
+      </div>
+      ${rd.lastScanAt ? `<p class="small muted">Last looked ${fmtTime(rd.lastScanAt)}: ${esc(rd.lastScanSummary || '')}</p>` : ''}
+    </div>
     <div class="row"><button class="btn primary" id="pSave">Save ${esc(p.name)}</button><span id="pMsg" class="muted small"></span></div>`;
   const rb = $('#resume'); if (rb) rb.onclick = async () => { await api('products.resume', { id: p.id }); await reloadProducts(); go('products'); };
   $('#pSave').onclick = async () => {
@@ -846,6 +1005,9 @@ VIEWS.products = async () => {
     try {
       $('#view').querySelectorAll('[data-k]').forEach(el => out[el.dataset.k] = el.value.trim());
       $('#view').querySelectorAll('[data-j]').forEach(el => { try { out[el.dataset.j] = JSON.parse(el.value); } catch { throw new Error(`${el.dataset.j} isn't valid JSON`); } });
+      const rc = $('#radarCard');
+      out.radar = { on: rc.querySelector('[data-r=on]').checked, sources: Object.fromEntries([...rc.querySelectorAll('[data-src]')].map(el => [el.dataset.src, el.checked])) };
+      for (const k of ['keywords', 'subreddits', 'forumDomains', 'competitors', 'voice']) out.radar[k] = rc.querySelector(`[data-r=${k}]`).value;
       await api('products.save', { product: out });
       await reloadProducts(); toast('Saved.');
     } catch (e) { toast(e.message); }
@@ -855,7 +1017,7 @@ VIEWS.products = async () => {
 // ---------------------------------------------------------------- Settings
 VIEWS.settings = async () => {
   const s = S.setup;
-  const [sup, ss] = await Promise.all([api('suppress.list'), api('senders.status')]);
+  const [sup, ss, rs] = await Promise.all([api('suppress.list'), api('senders.status'), api('radar.status')]);
   S.senders = ss.senders;
   const envRow = (k, help) => `<tr><td><code>${k}</code></td><td>${s.env?.[k] ? '<span class="pill good">Set</span>' : '<span class="pill bad">Missing</span>'}</td><td class="small muted">${help}</td></tr>`;
   const rows = S.senders.length ? S.senders : [{ email: '', product_id: S.product, segment: '', daily_cap: 10 }];
@@ -871,6 +1033,19 @@ VIEWS.settings = async () => {
       <p class="sub">Each domain needs four DNS records before warm-up starts. Check them here; anything missing comes with the exact record to add.</p>
       ${[...new Set(S.senders.map(x => x.email.split('@')[1]))].map(d => `<div class="row" style="margin-bottom:6px"><b style="flex:1">${esc(d)}</b><button class="btn small" data-dns="${esc(d)}">Check DNS</button></div><div id="dns-${esc(d).replace(/\./g, '-')}"></div>`).join('') || '<p class="muted">Add an inbox above first.</p>'}
     </div>
+    <div class="card"><h2>Conversations</h2>
+      <p class="sub">How often to look, how many replies a day per site, and hard monthly spending caps. When a cap is reached that source pauses until next month.</p>
+      <div class="grid3">
+        <div><label>Look every <small>hours</small></label><input type="number" data-rs="scanEveryHours" min="1" max="48" value="${rs.settings.scanEveryHours}"></div>
+        <div><label>Replies a day per site</label><input type="number" data-rs="dailyCapPerPlatform" min="1" max="50" value="${rs.settings.dailyCapPerPlatform}"></div>
+        <div><label>Minimum lead score <small>0 to 100</small></label><input type="number" data-rs="minScore" min="40" max="95" value="${rs.settings.minScore}"></div>
+        <div><label>X posts read a month <small>used ${rs.usage.xPostsFetched}</small></label><input type="number" data-rs="monthlyXPostLimit" min="0" value="${rs.settings.monthlyXPostLimit}"></div>
+        <div><label>Web searches a month <small>used ${rs.usage.webSearchCalls}</small></label><input type="number" data-rs="monthlyWebSearchLimit" min="0" value="${rs.settings.monthlyWebSearchLimit}"></div>
+        <div><label>Grok model</label><input data-rs="model" value="${esc(rs.settings.model)}"></div>
+      </div>
+      <label>Never use these words in replies <small>comma separated</small></label><input data-rs="bannedPhrases" value="${esc(rs.settings.bannedPhrases.join(', '))}">
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="rsSave">Save</button><span class="small muted">This month: ${rs.usage.requests} Grok calls, ${rs.usage.xPostsFetched} X posts read, ${rs.usage.webSearchCalls} web searches.</span></div>
+    </div>
     <div class="card"><h2>Do-not-contact list</h2>
       <p class="sub">Shared by every product, for ever. Opt-outs, bounces and complaints land here on their own.</p>
       <div class="row"><input id="supIn" placeholder="name@example.com" style="flex:1"><button class="btn" id="supAdd">Add</button></div>
@@ -883,6 +1058,8 @@ VIEWS.settings = async () => {
         ${envRow('SUPABASE_URL', 'Supabase > Project settings > API > Project URL')}
         ${envRow('SUPABASE_SERVICE_KEY', 'Supabase > Project settings > API > service_role key (secret)')}
         ${envRow('OPENAI_API_KEY', 'Writes and checks the emails. Model: ' + esc(s.model || ''))}
+        ${envRow('XAI_API_KEY', 'Grok, for Conversations: searches Reddit, X, LinkedIn and forums, and drafts replies')}
+        ${envRow('BSKY_HANDLE', 'Optional: BSKY_HANDLE and BSKY_APP_PASSWORD turn on Bluesky search')}
         ${envRow('GOOGLE_SA_EMAIL', 'Service account that sends on its own from your Workspace inboxes')}
         ${envRow('GOOGLE_SA_KEY', "That service account's private key")}
         ${envRow('DIGEST_TO', 'Your own address, for the 9am summary and hot-lead alerts')}
@@ -925,6 +1102,11 @@ VIEWS.settings = async () => {
     } catch (e) { out.innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
     b.disabled = false;
   });
+  $('#rsSave').onclick = async () => {
+    const out = {};
+    $('#view').querySelectorAll('[data-rs]').forEach(el => { out[el.dataset.rs] = el.dataset.rs === 'bannedPhrases' ? el.value.split(',').map(x => x.trim()).filter(Boolean) : el.type === 'number' ? Number(el.value) : el.value.trim(); });
+    try { await api('radar.settings.save', { settings: out }); toast('Saved.'); } catch (e) { toast(e.message); }
+  };
   $('#supAdd').onclick = async () => { const e = $('#supIn').value.trim(); if (!e) return; await api('suppress.add', { email: e, reason: 'added by you' }); go('settings'); };
   $('#theme').onclick = () => { const order = ['auto', 'light', 'dark']; const t = order[(order.indexOf(store.get('theme', 'auto')) + 1) % 3]; store.set('theme', t); applyTheme(); go('settings'); };
   $('#signout').onclick = () => { store.set('key', ''); KEY = ''; showGate(); };

@@ -141,6 +141,39 @@ try:
         expect(pg.locator('#toast')).to_have_text('Sent.')
         assert len(sent) == 2 and sent[1]['threadId'] == 'th1' and 'In-Reply-To: <rp1@mail.gmail.com>' in sent[1]['raw'], sent[1]['raw'][:500]
 
+        # Conversations (KeepHOA): look, edit, copy and open, mark posted, tracked link
+        pg.click('#productSeg button[data-p=keephoa]')
+        pg.click('nav button[data-view=conversations]')
+        pg.click('#cScan')
+        expect(pg.locator('#cList .card[data-id]')).to_have_count(1, timeout=20000)
+        card = pg.locator('#cList .card[data-id]').first
+        expect(card).to_contain_text('Just became treasurer')
+        expect(card.locator('[data-f=draft]')).to_have_value(re.compile('I built KeepHOA'))
+        expect(pg.locator('#nConv')).to_have_text('1')
+        pg.screenshot(path=f'{OUT}/12-conversations.png', full_page=True)
+        card.locator('[data-f=draft]').fill('Been there. One ledger per home helps. I built KeepHOA for this: {{LINK}}')
+        with pg.expect_popup() as pop: card.locator('button[data-a=reply]').click()
+        pop.value.close()
+        card.locator('button[data-a=sent]').click()
+        expect(pg.locator('#toast')).to_have_text('Marked as posted.')
+        pg.click('.seg button[data-t=sent]')
+        sent_card = pg.locator('#cList .card[data-id]').first
+        expect(sent_card).to_contain_text('0 clicks')
+        sent_card.locator('summary').click()
+        posted = sent_card.locator('details p').inner_text()
+        assert 'One ledger per home helps' in posted and '/go/' in posted, posted
+        link = re.search(r'http\S+/go/[a-z0-9]+', posted).group(0)
+        import urllib.request as ur
+        class NoRedirect(ur.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k): return None
+        try: ur.build_opener(NoRedirect).open(ur.Request(link, headers={'User-Agent': 'Mozilla/5.0'}))
+        except ur.HTTPError as e: assert e.code == 302 and 'keephoa.com/?ref=ce_' in e.headers['Location'], (e.code, e.headers.get('Location'))
+        pg.click('.seg button[data-t=sent]')
+        expect(pg.locator('#cList')).to_contain_text('1 clicks')
+        pg.click('nav button[data-view=results]')
+        expect(pg.locator('#view')).to_contain_text('Replies that worked')
+        pg.click('#productSeg button[data-p=ringsparrow]')
+
         # Results and Today
         pg.click('nav button[data-view=results]')
         expect(pg.locator('#view')).to_contain_text('people emailed')

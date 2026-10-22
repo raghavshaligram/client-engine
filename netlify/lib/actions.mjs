@@ -1,7 +1,7 @@
 // Everything the app can do. Used by /api (the screen) and by the autopilot schedules.
 import crypto from 'node:crypto';
 import { db } from './db.mjs';
-import { SEED_PRODUCTS } from './products.mjs';
+import { SEED_PRODUCTS, RADAR_DEFAULTS } from './products.mjs';
 import { fromMapsRow, fromRegistryRow, lower } from './clean.mjs';
 import { scanSite } from './scan.mjs';
 import { score } from './score.mjs';
@@ -9,6 +9,8 @@ import { draftOnce, footer, readReply, pickAngle } from './brain.mjs';
 import { serverGmailReady, send as gmailSend, thread as gmailThread, header } from './gmail.mjs';
 import { senderPlan, warmupHealth, checkDomain } from './warmup.mjs';
 import { virginiaRows, texasRow, VIRGINIA_URL } from './sources.mjs';
+import { radarSettings, saveRadarSettings, scanStatus, draftReplies, projectOf, scanProduct, startScan, finishScan, internalToken, siteUrl, PLATFORMS } from './radar.mjs';
+import { getUsage } from './xai.mjs';
 
 
 const DAY = 86_400_000;
@@ -103,6 +105,12 @@ export async function checkBrakes(productId) {
   return reason;
 }
 
+async function conversationByRef(ref) {
+  const slug = String(ref || '').replace(/^(ce|lr)_/, '');
+  if (!/^[a-z0-9]{6,16}$/.test(slug)) return null;
+  return db.one('conversations', { slug });
+}
+
 async function getSource(name) { return (await db.one('settings', { key: 'source.' + name }))?.value || {}; }
 async function setSource(name, patch) {
   const value = { ...(await getSource(name)), ...patch };
@@ -123,6 +131,7 @@ export const actions = {
       OPENAI_API_KEY: !!process.env.OPENAI_API_KEY, GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
       GOOGLE_SA_EMAIL: !!process.env.GOOGLE_SA_EMAIL, GOOGLE_SA_KEY: !!process.env.GOOGLE_SA_KEY,
       DIGEST_TO: !!process.env.DIGEST_TO, PURCHASE_SECRET: !!process.env.PURCHASE_SECRET,
+      XAI_API_KEY: !!process.env.XAI_API_KEY, BSKY_HANDLE: !!(process.env.BSKY_HANDLE && process.env.BSKY_APP_PASSWORD),
     };
     let products = [];
     try {
@@ -130,6 +139,11 @@ export const actions = {
       const have = new Set(products.map(p => p.id));
       const missing = SEED_PRODUCTS.filter(p => !have.has(p.id));
       if (missing.length) { await db.insert('products', missing); products = await db.select('products', { order: 'id' }); }
+      // Conversations settings reach databases created before them.
+      for (const p of products) if (RADAR_DEFAULTS[p.id] && !(p.radar && p.radar.sources)) {
+        p.radar = { ...RADAR_DEFAULTS[p.id], ...(p.radar || {}) };
+        await db.update('products', { id: p.id }, { radar: p.radar });
+      }
       // Segments added in later versions reach databases created before them.
       const hoa = products.find(p => p.id === 'keephoa');
       if (hoa && !(hoa.segments || []).some(s => s.id === 'texas')) {
@@ -146,6 +160,17 @@ export const actions = {
   async 'products.save'({ product }) {
     const cur = await getProduct(product.id);
     const fields = ['name', 'site', 'price', 'buyer', 'pains', 'proof', 'offer', 'never_say', 'angles', 'segments', 'rules', 'from_name', 'postal_address'];
+    if (product.radar !== undefined) {
+      const r = product.radar || {}, list = v => (Array.isArray(v) ? v : String(v || '').split('\n')).map(x => String(x).trim()).filter(Boolean);
+      product.radar = {
+        ...(cur.radar || {}), on: !!r.on,
+        sources: Object.fromEntries(PLATFORMS.map(k => [k, !!r.sources?.[k]])),
+        keywords: list(r.keywords).slice(0, 40), subreddits: list(r.subreddits).map(x => x.replace(/^\/?r\//, '')).slice(0, 10),
+        forumDomains: list(r.forumDomains).map(x => x.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase()).slice(0, 5),
+        competitors: list(r.competitors).slice(0, 8), voice: String(r.voice || '').slice(0, 4000),
+      };
+      fields.push('radar');
+    }
     const patch = { updated_at: iso(now()) };
     for (const f of fields) if (product[f] !== undefined) patch[f] = product[f];
     const [row] = await db.update('products', { id: cur.id }, patch);
@@ -590,16 +615,101 @@ export const actions = {
     return { queries: pick };
   },
 
-  // A product's licence server (PayPal/Dodo webhook) reports a purchase: mark the buyer as won.
-  async 'purchase.record'({ email, product }) {
+  // A product's site reports a signup that arrived through a Conversations link (?ref=ce_<slug>).
+  async 'signup.record'({ ref }) {
+    const row = await conversationByRef(ref);
+    if (row) await db.update('conversations', { id: row.id }, { signups: (row.signups || 0) + 1 });
+    return { matched: row ? 1 : 0 };
+  },
+
+  // A product's licence server (PayPal/Dodo webhook) reports a purchase: mark the buyer as won,
+  // and credit the conversation that brought them if the purchase carries its ref.
+  async 'purchase.record'({ email, product, ref }) {
+    const conv = await conversationByRef(ref);
+    if (conv) await db.update('conversations', { id: conv.id }, { purchases: (conv.purchases || 0) + 1 });
     const e = lower(email);
-    if (!e) throw new Error('email required');
+    if (!e) { if (conv) return { matched: 0, conversation: true }; throw new Error('email or ref required'); }
     const ps = await db.select('prospects', { select: 'id,product_id,status', filters: { email: e, product_id: product || undefined } });
     for (const p of ps) {
       await db.update('prospects', { id: p.id }, { status: 'won', next_due_at: null });
       await db.update('messages', { prospect_id: p.id, status: ['in', ['draft', 'approved']] }, { status: 'rejected', error: 'they bought' });
     }
-    return { matched: ps.length };
+    return { matched: ps.length, conversation: !!conv };
+  },
+
+  // ---- Conversations ----
+  async 'radar.queue'({ productId, status = 'new' }) {
+    const s = await radarSettings();
+    const filters = { product_id: productId || undefined, status };
+    const rows = await db.select('conversations', { filters, order: status === 'new' ? 'score.desc,created_at.desc' : 'sent_at.desc.nullslast,created_at.desc', limit: 200 });
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const sent = await db.select('conversations', { select: 'platform', filters: { status: 'sent', sent_at: ['gte', iso(today)] }, limit: 1000 });
+    const sentToday = {}; for (const r of sent) sentToday[r.platform] = (sentToday[r.platform] || 0) + 1;
+    const counts = {};
+    for (const st of ['new', 'sent', 'skipped']) counts[st] = await db.count('conversations', { product_id: productId || undefined, status: st });
+    return { rows: rows.map(r => ({ ...r, link: `${siteUrl()}/go/${r.slug}` })), sentToday, dailyCap: s.dailyCapPerPlatform, counts };
+  },
+
+  async 'radar.update'({ id, status, draft, skipReason }) {
+    const patch = {};
+    if (draft !== undefined) patch.draft = String(draft).slice(0, 4000);
+    if (status === 'sent') { patch.status = 'sent'; patch.sent_at = iso(now()); }
+    if (status === 'skipped') { patch.status = 'skipped'; patch.skip_reason = String(skipReason || '').slice(0, 120); }
+    if (status === 'new') { patch.status = 'new'; patch.sent_at = null; patch.skip_reason = null; }
+    const [row] = await db.update('conversations', { id }, patch);
+    if (!row) throw new Error('That conversation is gone');
+    return { row };
+  },
+
+  async 'radar.redraft'({ id, note }) {
+    const row = await db.one('conversations', { id });
+    if (!row) throw new Error('That conversation is gone');
+    const p = projectOf(await getProduct(row.product_id));
+    const d = (await draftReplies(p, await radarSettings(), [{ ...row, id: row.id }], note)).get(row.id);
+    if (!d) throw new Error('Could not draft a reply, try again');
+    const [updated] = await db.update('conversations', { id }, { draft: d.draft, link_included: d.linkIncluded });
+    return { row: updated };
+  },
+
+  // Starts a scan in the background function (up to 15 minutes). If the plan has no background
+  // functions, the screen falls back to one product and one source per request.
+  async 'radar.scan'({ productId, platforms }) {
+    if (!process.env.XAI_API_KEY) throw new Error('Set XAI_API_KEY in Netlify environment variables first.');
+    const r = await fetch(`${siteUrl()}/.netlify/functions/radar-scan-background`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-radar-internal': internalToken() },
+      body: JSON.stringify({ productId, platforms, trigger: 'manual' }),
+    }).catch(() => null);
+    if (!r || (r.status !== 202 && !r.ok)) return { started: false, fallback: true };
+    return { started: true };
+  },
+
+  async 'radar.scanInline'({ productId, platform, first, last }) {
+    if (first) await startScan('manual, from the screen');
+    const st = await scanStatus();
+    const carry = first ? { added: 0, parts: [] } : (st.carry || { added: 0, parts: [] });
+    const n = await scanProduct(await getProduct(productId), await radarSettings(), [platform], carry);
+    await db.upsert('settings', [{ key: 'radar.scan', value: { ...(await scanStatus()), carry }, updated_at: iso(now()) }], 'key');
+    if (last) await finishScan();
+    return { added: n };
+  },
+
+  async 'radar.status'() {
+    return { scan: await scanStatus(), usage: await getUsage(), settings: await radarSettings(), xai: !!process.env.XAI_API_KEY, bluesky: !!(process.env.BSKY_HANDLE && process.env.BSKY_APP_PASSWORD) };
+  },
+
+  async 'radar.settings.save'({ settings }) { return { settings: await saveRadarSettings(settings || {}) }; },
+
+  async 'radar.stats'({ productId }) {
+    const rows = await db.select('conversations', { select: 'id,platform,status,clicks,signups,purchases,draft,url,author,sent_at,score', filters: { product_id: productId || undefined }, limit: 5000 });
+    const byPlatform = {};
+    for (const r of rows) {
+      const g = byPlatform[r.platform] ||= { found: 0, sent: 0, clicks: 0, signups: 0, purchases: 0 };
+      g.found++; if (r.status === 'sent') g.sent++;
+      g.clicks += r.clicks || 0; g.signups += r.signups || 0; g.purchases += r.purchases || 0;
+    }
+    const best = rows.filter(r => r.status === 'sent' && (r.clicks || r.signups || r.purchases))
+      .sort((a, b) => (b.purchases * 100 + b.signups * 10 + b.clicks) - (a.purchases * 100 + a.signups * 10 + a.clicks)).slice(0, 8);
+    return { byPlatform, best };
   },
 
   async 'stats'({ productId }) {

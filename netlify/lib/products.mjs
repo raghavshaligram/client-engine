@@ -1,3 +1,45 @@
+// What Conversations listens for, per product. Merged into a product the first time it lacks it.
+export const RADAR_DEFAULTS = {
+  keephoa: {
+    on: true,
+    sources: { reddit: true, forums: true, x: false, linkedin: false, hn: false, bluesky: false },
+    keywords: [
+      'hoa treasurer spreadsheet', 'new hoa treasurer help', 'self managed hoa accounting', 'hoa accounting software',
+      'hoa bookkeeping quickbooks', 'taking over as hoa treasurer', 'tracking hoa dues', 'hoa reserve fund tracking',
+      'condo association bookkeeping', 'hoa financial report template', 'small hoa software', 'payhoa alternative',
+      'hoa treasurer handoff', 'hoa owes dues tracking', 'volunteer treasurer hoa',
+    ],
+    subreddits: ['HOA', 'condo', 'homeowners', 'RealEstate', 'Bookkeeping'],
+    forumDomains: ['quora.com'],
+    competitors: ['spreadsheets', 'QuickBooks', 'PayHOA', 'MoneyMinder', 'a management company'],
+    voice: '',
+  },
+  pdfmacro: {
+    on: false,
+    sources: { reddit: true, forums: true, x: true, linkedin: false, hn: true, bluesky: false },
+    keywords: [
+      'redact pdf without uploading', 'pdf redaction not working', 'redacted text still visible pdf', 'acrobat subscription too expensive',
+      'offline pdf editor', 'pdf editor no subscription', 'merge pdf without uploading', 'pdf tool for law firm',
+    ],
+    subreddits: ['Lawyertalk', 'paralegal', 'LawFirm', 'pdf', 'smallbusiness'],
+    forumDomains: ['quora.com', 'stackexchange.com'],
+    competitors: ['Adobe Acrobat', 'Smallpdf', 'iLovePDF', 'Foxit'],
+    voice: '',
+  },
+  ringsparrow: {
+    on: false,
+    sources: { reddit: true, forums: false, x: true, linkedin: false, hn: false, bluesky: false },
+    keywords: [
+      'missed calls losing customers', 'missed call text back', 'gohighlevel too expensive', 'business texting app',
+      'podium alternative', 'text customers from business number', 'crm for small contractor',
+    ],
+    subreddits: ['smallbusiness', 'HVAC', 'Plumbing', 'Contractor', 'msp', 'gohighlevel'],
+    forumDomains: [],
+    competitors: ['GoHighLevel', 'Podium', 'SimpleTexting', 'Textline'],
+    voice: '',
+  },
+};
+
 // Starting product files. Loaded into the database the first time the app opens.
 // After that, edit them on the Products screen; these defaults are never re-applied.
 // Every sentence the writer produces must trace back to these fields, so keep them true.
@@ -44,6 +86,7 @@ export const SEED_PRODUCTS = [
     },
     from_name: '',
     postal_address: '',
+    radar: RADAR_DEFAULTS.pdfmacro,
   },
   {
     id: 'keephoa',
@@ -87,6 +130,7 @@ export const SEED_PRODUCTS = [
     },
     from_name: '',
     postal_address: '',
+    radar: RADAR_DEFAULTS.keephoa,
   },
   {
     id: 'ringsparrow',
@@ -128,5 +172,6 @@ export const SEED_PRODUCTS = [
     },
     from_name: '',
     postal_address: '',
+    radar: RADAR_DEFAULTS.ringsparrow,
   },
 ];
