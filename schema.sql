@@ -188,3 +188,7 @@ create table if not exists radar_seen (
 );
 alter table conversations enable row level security;
 alter table radar_seen enable row level security;
+
+-- Email checks (Reacher, run nightly on your computer): safe | risky | unknown | invalid. Null = not checked yet.
+alter table prospects add column if not exists verified text;
+alter table prospects add column if not exists verified_at timestamptz;

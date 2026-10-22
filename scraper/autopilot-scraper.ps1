@@ -2,6 +2,7 @@
 # 1. Virginia: if the server couldn't download Virginia's association list this week, download it here and send it.
 # 2. Texas: read the next batch of HOA management certificates (OCR in Docker) and send any volunteer emails found.
 # 3. Google Maps: run the searches the app asks for (only for products running low on people) and upload the results.
+# 4. Email checks: ask Reacher (in Docker, on this computer) whether each new address exists, without sending anything.
 # Works in Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +16,8 @@ $cfg = Get-Content 'config.json' -Raw | ConvertFrom-Json
 $site = $cfg.site.TrimEnd('/')
 $max = 6; if ($null -ne $cfg.maxSearches) { $max = [int]$cfg.maxSearches }
 $texasPerNight = 200; if ($null -ne $cfg.texasPerNight) { $texasPerNight = [int]$cfg.texasPerNight }
+$verifyPerNight = 300; if ($null -ne $cfg.verifyPerNight) { $verifyPerNight = [int]$cfg.verifyPerNight }
+$reacher = 'http://localhost:8080'; if ($env:CE_REACHER_URL) { $reacher = $env:CE_REACHER_URL }
 $here = (Get-Location).Path
 
 function Api($body) {
@@ -87,6 +90,36 @@ if ($texasPerNight -gt 0 -and (Docker-Ready)) {
   } catch { Log "Texas failed: $($_.Exception.Message)" }
 }
 
+# ---- 4. Email checks (defined here, run at the end) ------------------------------------
+function Verify-Emails {
+  if ($verifyPerNight -le 0) { return }
+  try {
+    if (-not $env:CE_REACHER_URL) {
+      if (-not (Docker-Ready)) { return }
+      & docker start reacher *> $null
+      if ($LASTEXITCODE -ne 0) { & docker run -d --name reacher --restart unless-stopped -p 8080:8080 reacherhq/backend:latest *> $null }
+      Start-Sleep -Seconds 10
+    }
+    $batch = Api @{ action = 'verify.next'; limit = $verifyPerNight }
+    $list = @($batch.emails | ForEach-Object { $_ })
+    Log "Email checks: $($list.Count) to check ($($batch.markedUnknown) Yahoo/AOL/Microsoft addresses marked as can't-check)"
+    $results = @(); $counts = @{}
+    foreach ($e in $list) {
+      $reach = 'unknown'
+      try {
+        $r = Invoke-RestMethod -Uri "$reacher/v0/check_email" -Method Post -ContentType 'application/json' -Body (@{ to_email = $e.email } | ConvertTo-Json) -TimeoutSec 60
+        if ($r.is_reachable) { $reach = [string]$r.is_reachable }
+      } catch { }
+      $counts[$reach] = 1 + [int]$counts[$reach]
+      $results += @{ id = $e.id; reachable = $reach }
+      if ($results.Count -ge 50) { Api @{ action = 'verify.results'; results = $results } | Out-Null; $results = @() }
+      Start-Sleep -Milliseconds 500   # one at a time, gently
+    }
+    if ($results.Count) { Api @{ action = 'verify.results'; results = $results } | Out-Null }
+    Log ("  " + (($counts.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '))
+  } catch { Log "Email checks failed: $($_.Exception.Message)" }
+}
+
 # ---- 3. Google Maps searches ----------------------------------------------------------
 function Run-Scraper($queriesFile, $outName) {
   if ($env:CE_FAKE_SCRAPER) { Copy-Item $env:CE_FAKE_SCRAPER (Join-Path 'gmaps-output' $outName); return }
@@ -97,8 +130,8 @@ function Run-Scraper($queriesFile, $outName) {
 
 try { $next = Api @{ action = 'scrape.next'; limit = $max } } catch { Log "Could not get tonight's searches: $($_.Exception.Message)"; exit 1 }
 $queries = @($next.queries)
-if ($queries.Count -eq 0) { Log 'Maps: nothing to search tonight (every product has enough people ready, or the search plan is empty).'; Log 'Done.'; exit 0 }
-if (-not $env:CE_FAKE_SCRAPER -and -not (Docker-Ready)) { exit 1 }
+if ($queries.Count -eq 0) { Log 'Maps: nothing to search tonight (every product has enough people ready, or the search plan is empty).'; Verify-Emails; Log 'Done.'; exit 0 }
+if (-not $env:CE_FAKE_SCRAPER -and -not (Docker-Ready)) { Verify-Emails; exit 1 }
 
 $keep = 'title', 'category', 'address', 'website', 'phone', 'review_count', 'review_rating', 'emails', 'status', 'complete_address', 'link', 'about', 'descriptions'
 $groups = $queries | Group-Object -Property { "$($_.productId)|$($_.segment)" }
@@ -123,4 +156,5 @@ foreach ($g in $groups) {
   }
   Log "  $added new people added"
 }
+Verify-Emails
 Log 'Done.'

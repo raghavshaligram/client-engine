@@ -140,6 +140,8 @@ export async function digestText(now = new Date()) {
   const tx = (await db.one('settings', { key: 'source.texas' }))?.value;
   if (va?.last_error) lines.push(`Virginia list: the server could not download it (${va.last_error}). Your computer will fetch it tonight.`);
   if (tx?.read) lines.push(`Texas certificates read so far: ${tx.read}, volunteers found: ${tx.volunteers}.`);
+  const vt = (await db.one('settings', { key: 'verify.totals' }))?.value;
+  if (vt) lines.push(`Email checks so far: ${vt.safe || 0} confirmed, ${vt.invalid || 0} don't exist (skipped), ${vt.risky || 0} risky, ${vt.unknown || 0} couldn't be checked.`);
   lines.push('');
   for (const p of await db.select('products', { order: 'id' })) {
     const st = await autopilotState(p);

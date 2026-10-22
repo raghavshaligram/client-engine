@@ -19,6 +19,7 @@ const iso = d => new Date(d).toISOString();
 export const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 export const fail = (msg, status = 400) => json({ error: msg }, status);
 const QUEUE_LIMIT = 60;
+export const UNCHECKABLE = /^(yahoo|ymail|rocketmail|aol|verizon|att|sbcglobal|bellsouth|hotmail|outlook|live|msn)\./i;
 export const READY_TARGET = 150;   // the scraper only runs for products with fewer people than this ready
 export const LEARN_APPROVALS = 50; // first emails you approve before a product may run on autopilot
 export const LEARN_EDIT_RATE = 0.15;
@@ -289,8 +290,10 @@ export const actions = {
       const nowIso = iso(now());
       const due = await db.select('prospects', { filters: { product_id: productId, status: 'contacted', next_due_at: ['lte', nowIso] }, order: 'next_due_at.asc', limit: 1 });
       const back = due.length ? [] : await db.select('prospects', { filters: { product_id: productId, status: 'rest', rest_until: ['lte', nowIso] }, limit: 1 });
+      const checking = !!(await db.one('settings', { key: 'verify.enabled' }))?.value;
       const fresh = due.length || back.length ? [] : await db.select('prospects', {
-        filters: { product_id: productId, status: 'scanned', score: ['gte', r.min_score ?? 0] }, order: 'score.desc,created_at.asc', limit: 1,
+        filters: { product_id: productId, status: 'scanned', score: ['gte', r.min_score ?? 0], verified: checking ? ['not.is', null] : undefined },
+        order: 'score.desc,created_at.asc', limit: 1,
       });
       p = due[0] || back[0] || fresh[0];
     }
@@ -669,6 +672,41 @@ export const actions = {
     if (!d) throw new Error('Could not draft a reply, try again');
     const [updated] = await db.update('conversations', { id }, { draft: d.draft, link_included: d.linkIncluded });
     return { row: updated };
+  },
+
+  // ---- Email checks (nightly on your computer) ----
+  // Hands out addresses to check. Yahoo, AOL, Verizon and Microsoft mailboxes can't be checked
+  // from a home connection, so they're marked "unknown" here and never sent to the checker.
+  async 'verify.next'({ limit = 300 }) {
+    const out = [];
+    const rows = await db.select('prospects', { select: 'id,email', filters: { status: ['in', ['new', 'scanned']], verified: null }, order: 'score.desc,created_at.asc', limit: Math.min(1000, limit * 2) });
+    const skip = [];
+    for (const r of rows) {
+      if (UNCHECKABLE.test(r.email.split('@')[1] || '')) skip.push(r.id);
+      else if (out.length < limit) out.push({ id: r.id, email: r.email });
+    }
+    for (let i = 0; i < skip.length; i += 150) await db.update('prospects', { id: ['in', skip.slice(i, i + 150)] }, { verified: 'unknown', verified_at: iso(now()) });
+    await db.upsert('settings', [{ key: 'verify.enabled', value: true, updated_at: iso(now()) }], 'key');
+    return { emails: out, markedUnknown: skip.length };
+  },
+
+  async 'verify.results'({ results = [] }) {
+    const counts = {};
+    const products = Object.fromEntries((await db.select('products', {})).map(p => [p.id, p]));
+    for (const r of results.slice(0, 500)) {
+      const v = ['safe', 'risky', 'unknown', 'invalid'].includes(r.reachable) ? r.reachable : 'unknown';
+      counts[v] = (counts[v] || 0) + 1;
+      const p = await db.one('prospects', { id: r.id });
+      if (!p) continue;
+      const patch = { verified: v, verified_at: iso(now()) };
+      if (v === 'invalid') Object.assign(patch, { status: 'skipped', skip_reason: 'email address does not exist (checked)' });
+      else Object.assign(patch, score({ ...p, verified: v }, products[p.product_id]));
+      await db.update('prospects', { id: p.id }, patch);
+    }
+    const prev = (await db.one('settings', { key: 'verify.totals' }))?.value || {};
+    for (const [k, n] of Object.entries(counts)) prev[k] = (prev[k] || 0) + n;
+    await db.upsert('settings', [{ key: 'verify.totals', value: { ...prev, last: iso(now()) }, updated_at: iso(now()) }], 'key');
+    return { counts };
   },
 
   // Starts a scan in the background function (up to 15 minutes). If the plan has no background

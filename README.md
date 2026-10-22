@@ -107,6 +107,13 @@ That secret can only mark purchases; it opens nothing else.
 
 The scraper is [gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper) (MIT). Scraping Google Maps breaks Google's terms; the practical risk is Google blocking your IP for a while, so keep runs small.
 
+## Email checks (Reacher, nightly on your computer)
+Before anyone gets a first email, the nightly job asks [Reacher](https://github.com/reacherhq/check-if-email-exists) (MIT, in Docker on your computer) whether the mailbox exists. Nothing is sent to them.
+- **Doesn't exist:** skipped, so it never bounces and never counts against your bounce brake.
+- **Confirmed:** +1 score. **Risky** (may not take mail): -2.
+- **Yahoo, AOL, Verizon and Microsoft addresses can't be checked from a home connection**, so they're marked "couldn't check" and emailed as normal. Gmail and most private domains give clear answers. Tested on 22 Oct 2026 from this computer.
+- Once checks have run, first emails only go to addresses that have been through a check. 300 a night by default (`verifyPerNight` in `config.json`, 0 turns it off). The job starts the `reacher` container itself.
+
 ## Conversations (merged from Launch Radar)
 Finds people who are asking for help right now and drafts a reply for you to post yourself. It never posts, so your accounts stay safe.
 - **Per product**, under Products → Conversations: switch it on, choose where to look, the phrases people would type, subreddits, forum sites and your voice. KeepHOA starts on, with Reddit (r/HOA, r/condo and others) and Quora. PDFMacro and RingSparrow start off.

@@ -38,5 +38,7 @@ export function score(p, product) {
     if (x.new_registration) add(2, 'registered with the state in the last year (likely a new board)');
   }
   if (x.generic_email && product.id !== 'keephoa') add(-1, 'generic address');
+  if (p.verified === 'safe') add(1, 'mailbox confirmed to exist');
+  if (p.verified === 'risky') add(-2, 'mailbox may not take mail');
   return { score: n, score_why: why.join('; ') || 'no signals yet' };
 }
