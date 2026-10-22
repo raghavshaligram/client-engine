@@ -186,6 +186,7 @@ async function go(view) {
   $('#productSeg').classList.toggle('hide', view === 'settings');
   $('#view').innerHTML = '<div class="empty">Loading…</div>';
   try { await VIEWS[view](); } catch (e) { $('#view').innerHTML = `<div class="note bad">${esc(e.message)}</div>`; }
+  if (S.setup?.schemaUpdate) $('#view').insertAdjacentHTML('afterbegin', `<div class="note bad">The database needs a small update for link tracking. In Supabase, open <b>SQL Editor</b>, paste the whole of <code>schema.sql</code> from GitHub and press <b>Run</b> (it's safe to run again, nothing is lost). Then reload this page.</div>`);
 }
 
 async function refreshBadges() {
@@ -306,7 +307,7 @@ VIEWS.today = async () => {
     <div class="grid2">
       <div class="card"><h2>People</h2>
         <table>
-          ${[['new', 'Waiting for a website check'], ['scanned', 'Ready to write to'], ['drafted', 'Email drafted'], ['contacted', 'In sequence'], ['replied', 'Replied'], ['interested', 'Interested'], ['won', 'Customers'], ['rest', 'Resting (not now)'], ['skipped', 'Skipped']]
+          ${[['new', 'Waiting for a website check'], ['scanned', 'Ready to write to'], ['drafted', 'Email drafted'], ['contacted', 'In sequence'], ['replied', 'Replied'], ['interested', 'Interested'], ['signed_up', 'Signed up'], ['won', 'Customers'], ['rest', 'Resting (not now)'], ['skipped', 'Skipped']]
             .map(([k, l]) => `<tr><td>${l}</td><td class="num">${c[k] || 0}</td></tr>`).join('')}
         </table>
       </div>
@@ -509,7 +510,7 @@ VIEWS.prospects = async () => {
             ${['scanned', 'new'].includes(x.status) ? `<button class="btn small" data-a="skip">Skip</button>` : ''}
             ${x.status === 'skipped' ? `<button class="btn small" data-a="unskip">Bring back</button>` : ''}
             ${p.id === 'ringsparrow' && ['scanned', 'new'].includes(x.status) ? `<button class="btn small" data-a="call">Test call</button>` : ''}
-            ${['contacted', 'replied', 'interested', 'rest', 'done'].includes(x.status) ? `<button class="btn small" data-a="won">Bought</button>` : ''}
+            ${['contacted', 'replied', 'interested', 'signed_up', 'rest', 'done'].includes(x.status) ? `<button class="btn small" data-a="won">Bought</button>` : ''}
             <button class="btn small danger" data-a="block" title="Never email this address again">Block</button>
           </td></tr>`).join('')}</table>` : '<div class="empty">Nobody here.</div>'}
     </div>`;
@@ -970,15 +971,17 @@ VIEWS.results = async () => {
       ${Object.entries(cs.byPlatform).map(([k, v]) => `<tr><td>${PL[k] || esc(k)}</td><td class="num">${v.found}</td><td class="num">${v.sent}</td><td class="num">${v.clicks}</td><td class="num">${v.signups}</td><td class="num">${v.purchases}</td></tr>`).join('')}</table>` : '<p class="muted">No conversations yet.</p>'}
     ${cs.best.length ? `<h3>Replies that worked</h3><table>${cs.best.map(b => `<tr><td class="small"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${PL[b.platform] || ''} · @${esc(b.author)}</a><br><span class="muted">${esc(String(b.draft || '').slice(0, 160))}</span></td><td class="num small">${b.clicks} clicks · ${b.signups} signups · ${b.purchases} sales</td></tr>`).join('')}</table>` : ''}</div>`;
   const tbl = (title, g, note) => `<div class="card"><h2>${title}</h2>${note ? `<p class="sub">${note}</p>` : ''}
-    ${Object.keys(g).length ? `<table><tr><th></th><th class="num">People</th><th class="num">Replied</th><th class="num">Interested</th><th class="num">Bought</th><th class="num">Bounced</th></tr>
-    ${Object.entries(g).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.people}</td><td class="num">${v.replied} <span class="muted">${pct(v.replied, v.people)}</span></td><td class="num">${v.positive} <span class="muted">${pct(v.positive, v.people)}</span></td><td class="num">${v.won}</td><td class="num">${v.bounced} <span class="muted">${pct(v.bounced, v.people)}</span></td></tr>`).join('')}</table>` : '<p class="muted">Nothing sent yet.</p>'}</div>`;
+    ${Object.keys(g).length ? `<table><tr><th></th><th class="num">People</th><th class="num">Clicked</th><th class="num">Replied</th><th class="num">Interested</th><th class="num">Signed up</th><th class="num">Bought</th><th class="num">Bounced</th></tr>
+    ${Object.entries(g).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.people}</td><td class="num">${v.clicked || 0} <span class="muted">${pct(v.clicked || 0, v.people)}</span></td><td class="num">${v.replied} <span class="muted">${pct(v.replied, v.people)}</span></td><td class="num">${v.positive} <span class="muted">${pct(v.positive, v.people)}</span></td><td class="num">${v.signedUp || 0}</td><td class="num">${v.won}</td><td class="num">${v.bounced} <span class="muted">${pct(v.bounced, v.people)}</span></td></tr>`).join('')}</table>` : '<p class="muted">Nothing sent yet.</p>'}</div>`;
   const angleName = id => (p.angles || []).find(a => a.id === id)?.name || id;
   const byAngle = Object.fromEntries(Object.entries(st.byAngle).map(([k, v]) => [angleName(k), v]));
   const t = st.totals;
   const bounce = t.people ? t.bounced / t.people : 0;
   $('#view').innerHTML = `
-    <div class="grid3">
+    <div class="grid3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
       <div class="stat"><b>${t.people || 0}</b><span>people emailed</span></div>
+      <div class="stat"><b>${t.clicked || 0}</b><span>clicked a link${st.tracking?.domain ? '' : ' (needs TRACK_DOMAIN)'}</span></div>
+      <div class="stat"><b>${t.signedUp || 0}</b><span>signed up</span></div>
       <div class="stat"><b>${pct(t.positive || 0, t.people) || '0%'}</b><span>interested or asking (aim: 2%+)</span></div>
       <div class="stat"><b>${t.won || 0}</b><span>customers</span></div>
     </div>
@@ -989,8 +992,20 @@ VIEWS.results = async () => {
     ${tbl('By angle', byAngle, 'Every angle gets about 100 sends before the learner shifts toward the winner.')}
     ${tbl('By segment', st.bySegment)}
     ${tbl('By score', st.byScore, 'If high scores don\'t reply more than low ones, the scoring needs adjusting.')}
+    ${clickCard(st)}
     ${convCard}`;
 };
+
+function clickCard(st) {
+  const steps = Object.entries(st.clicksByStep || {});
+  const when = d => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `<div class="card"><h2>Link clicks</h2>
+    <p class="sub">${st.tracking?.domain ? `Links go through <b>${esc(st.tracking.domain)}</b>. Security scanners that open every link on arrival are ignored, so these are people.` : 'Clicks are not being counted yet: set <code>TRACK_DOMAIN</code> (see Settings). Signups and purchases are still credited through <code>?ref=</code>.'}
+    Someone who clicked but didn't reply is warm: a short personal note often works.</p>
+    ${steps.length ? `<p class="small">Clicks by email: ${steps.sort().map(([k, v]) => `after email ${esc(k)}: <b>${v}</b>`).join(' · ')}</p>` : ''}
+    ${st.clickers?.length ? `<table><tr><th>Person</th><th class="num">Clicks</th><th>First click</th><th></th></tr>${st.clickers.map(c => `<tr><td>${esc(c.name || '')}<br><span class="small muted">${esc(c.email)}</span></td><td class="num">${c.clicks}</td><td class="small">${when(c.first_click_at)}</td><td>${c.signed_up ? '<span class="pill good">Signed up</span>' : c.status === 'won' ? '<span class="pill good">Customer</span>' : c.replied ? '<span class="pill">Replied</span>' : '<span class="pill warn">No reply yet</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">No clicks yet.</p>'}
+  </div>`;
+}
 
 // ---------------------------------------------------------------- Products
 VIEWS.products = async () => {
@@ -1102,7 +1117,8 @@ VIEWS.settings = async () => {
         ${envRow('GOOGLE_SA_EMAIL', 'Service account that sends on its own from your Workspace inboxes')}
         ${envRow('GOOGLE_SA_KEY', "That service account's private key")}
         ${envRow('DIGEST_TO', 'Your own address, for the 9am summary and hot-lead alerts')}
-        ${envRow('PURCHASE_SECRET', 'Lets your products report purchases, so buyers are marked as customers')}
+        ${envRow('PURCHASE_SECRET', 'Lets your products report signups and purchases, so they are credited to the email that brought them')}
+        ${envRow('TRACK_DOMAIN', 'Click tracking: a subdomain of a sending domain pointed at this site, e.g. go.getkeephoa.com. Without it, links still carry ?ref= so signups are credited, but clicks are not counted')}
         ${envRow('GOOGLE_CLIENT_ID', 'Optional: only for inboxes set to send from this browser')}
         <tr><td>Database</td><td>${s.dbError ? '<span class="pill bad">Not ready</span>' : '<span class="pill good">Ready</span>'}</td><td class="small muted">Run schema.sql once in the Supabase SQL Editor</td></tr>
       </table>

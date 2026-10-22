@@ -107,6 +107,23 @@ That secret can only mark purchases; it opens nothing else.
 
 The scraper is [gosom/google-maps-scraper](https://github.com/gosom/google-maps-scraper) (MIT). Scraping Google Maps breaks Google's terms; the practical risk is Google blocking your IP for a while, so keep runs small.
 
+## Email link tracking (clicks, signups, sales)
+Every person gets one short code. When an email carries a link (KeepHOA: email 3, and answers to interested replies), the link is theirs:
+- **With `TRACK_DOMAIN` set** (e.g. `go.getkeephoa.com`): `https://go.getkeephoa.com/go/<code>` counts the click, then sends them to the product with `?ref=ce_<code>`.
+- **Without it:** the link goes straight to the product with `?ref=ce_<code>`. Clicks aren't counted, but signups and sales are still credited.
+- Links never use the shared `netlify.app` address: spam filters distrust it, and it would hurt delivery for everyone.
+- **Not people:** security scanners (Microsoft Safe Links, Mimecast, Proofpoint) open every link the moment an email arrives. Clicks in the first 2 minutes after sending, HEAD requests and known bots are ignored.
+- **No open tracking.** Tracking pixels push cold email toward spam, and Apple Mail fakes opens anyway.
+- **When someone signs up,** their follow-ups stop (status "Signed up"). When they buy, they're a customer.
+- **Results** shows clicks and signups by angle, segment and score, which email the clicks came after, and a list of people who clicked. Someone who clicked but didn't reply is worth a personal note.
+
+**Setting up the tracking domain (5 minutes, after you buy the sending domains):**
+1. Netlify: **Domain management → Add a domain alias** → `go.getkeephoa.com`.
+2. At the domain's DNS: add a `CNAME` record, name `go`, value `storied-gecko-b600b4.netlify.app`. Netlify adds HTTPS by itself within an hour.
+3. Netlify environment variables: `TRACK_DOMAIN` = `go.getkeephoa.com`, then trigger a deploy.
+
+Use a sending domain, never keephoa.com itself, so cold email can never affect your main domain. Signups are reported with the `signup.record` snippet under Conversations below. Send `ref`, `email` or both; matching by email works even when the ref was lost.
+
 ## Email checks (Reacher, nightly on your computer)
 Before anyone gets a first email, the nightly job asks [Reacher](https://github.com/reacherhq/check-if-email-exists) (MIT, in Docker on your computer) whether the mailbox exists. Nothing is sent to them.
 - **Doesn't exist:** skipped, so it never bounces and never counts against your bounce brake.

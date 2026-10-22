@@ -90,7 +90,7 @@ export async function repliesTick({ timeLeft = budget(14000), perInbox = 15 } = 
   for (const s of (await senders()).filter(x => x.mode !== 'browser')) {
     const ps = await db.select('prospects', {
       select: 'id,name,email,thread_id,product_id', order: 'replies_checked_at.asc.nullsfirst', limit: perInbox,
-      filters: { sender: s.email, thread_id: ['not.is', null], last_sent_at: ['gte', since], status: ['in', ['contacted', 'drafted', 'done', 'rest', 'replied', 'interested']] },
+      filters: { sender: s.email, thread_id: ['not.is', null], last_sent_at: ['gte', since], status: ['in', ['contacted', 'drafted', 'done', 'rest', 'replied', 'interested', 'signed_up']] },
     });
     if (!ps.length) continue;
     const ids = ps.map(p => p.id);

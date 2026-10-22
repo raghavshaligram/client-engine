@@ -3,14 +3,15 @@ import crypto from 'node:crypto';
 
 const DEFAULTS = {
   products: { paused: false, angles: [], segments: [], rules: {} },
-  prospects: { status: 'new', step: 0, score: 0, extra: {}, signals: {} },
+  prospects: { status: 'new', step: 0, score: 0, extra: {}, signals: {}, clicks: 0, link_slug: null, first_click_at: null, signed_up_at: null },
   messages: { status: 'draft', edited: false },
   replies: { handled: false },
   suppression: {}, settings: {}, scrape_queries: {}, warmup: { cleaned: false, error: null, replied_at: null, landed_spam: null },
   conversations: { status: 'new', score: 0, clicks: 0, signups: 0, purchases: 0, link_included: false, sent_at: null },
   radar_seen: {},
+  link_events: {},
 };
-const KEYS = { products: ['id'], prospects: ['id'], messages: ['id'], replies: ['id'], suppression: ['email'], settings: ['key'], scrape_queries: ['id'], warmup: ['id'], conversations: ['id'], radar_seen: ['url'] };
+const KEYS = { products: ['id'], prospects: ['id'], messages: ['id'], replies: ['id'], suppression: ['email'], settings: ['key'], scrape_queries: ['id'], warmup: ['id'], conversations: ['id'], radar_seen: ['url'], link_events: ['id'] };
 const UNIQUE = { prospects: [['product_id', 'email']], replies: [['gmail_id']], scrape_queries: [['product_id', 'query']], conversations: [['slug']] };
 
 export function fakeDb() {

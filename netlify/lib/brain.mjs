@@ -93,7 +93,7 @@ const WRITER = `You write short, plain, honest cold emails for a solo founder. R
 - Use the link only where told, written exactly as {{LINK}}.
 Return JSON: {"skip": false, "detail": "the one real detail you used", "subject": "...", "body": "..."}`;
 
-export async function writeEmail({ product, prospect, step, angle, previous = [], fromName, problems }) {
+export async function writeEmail({ product, prospect, step, angle, previous = [], fromName, problems, link: trackedLink }) {
   const r = product.rules || {};
   const seg = (product.segments || []).find(s => s.id === prospect.segment) || {};
   const maxWords = r.words?.[step - 1] ?? 90, maxLinks = r.links?.[step - 1] ?? 0;
@@ -119,7 +119,7 @@ Body at most ${maxWords} words. Links allowed: ${maxLinks} (as {{LINK}}).${step 
 ${problems?.length ? `\nYOUR LAST DRAFT FAILED THESE CHECKS, FIX THEM:\n- ${problems.join('\n- ')}` : ''}`;
   const out = await ai(WRITER, user, { temperature: 0.5 });
   if (out.skip) return { skip: true, skip_reason: out.skip_reason || 'no real detail to mention' };
-  const link = landingLink(product, prospect.segment);
+  const link = trackedLink || landingLink(product, prospect.segment);
   let body = String(out.body || '').replace(/\{\{\s*LINK\s*\}\}/g, link).replace(/\s*[—–]\s*/g, ', ').trim();
   const subject = step === 1 ? String(out.subject || '').replace(/[—–]/g, '-').trim() : '';
   return { subject, body, detail: out.detail || '', lintProblems: lint({ subject, body }, { maxWords, maxLinks, step, link }) };
@@ -178,10 +178,10 @@ Labels: interested (wants to see more, asks for the video/demo/link, asks price)
 Draft an answer for interested, question and wrong_person only, under 90 words, plain, honest, using only facts from the product file. For interested, include the product link. Never promise features not in the product file.
 Return JSON: {"label": "...", "summary": "one line", "answer": "..." }`;
 
-export async function readReply({ product, prospect, reply }) {
+export async function readReply({ product, prospect, reply, link }) {
   const quick = quickLabel(reply);
   if (quick) return { label: quick, summary: '', answer: '' };
-  const out = await ai(READER, `${productFile(product)}\nPRODUCT LINK: ${landingLink(product, prospect.segment)}\n\nPROSPECT:\n${prospectFacts(prospect)}\n\nTHEIR REPLY:\n${reply.body.slice(0, 3000)}`, { temperature: 0.2 });
+  const out = await ai(READER, `${productFile(product)}\nPRODUCT LINK: ${link || landingLink(product, prospect.segment)}\n\nPROSPECT:\n${prospectFacts(prospect)}\n\nTHEIR REPLY:\n${reply.body.slice(0, 3000)}`, { temperature: 0.2 });
   const labels = ['interested', 'question', 'not_now', 'unsubscribe', 'wrong_person', 'angry', 'auto_reply'];
   return { label: labels.includes(out.label) ? out.label : 'question', summary: out.summary || '', answer: out.answer || '' };
 }

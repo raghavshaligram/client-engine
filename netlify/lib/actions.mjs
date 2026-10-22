@@ -1,6 +1,7 @@
 // Everything the app can do. Used by /api (the screen) and by the autopilot schedules.
 import crypto from 'node:crypto';
 import { db, projectUrl } from './db.mjs';
+import { linkFor, logEvent, prospectByRef, trackDomain } from './track.mjs';
 import { SEED_PRODUCTS, RADAR_DEFAULTS } from './products.mjs';
 import { fromMapsRow, fromRegistryRow, lower } from './clean.mjs';
 import { scanSite } from './scan.mjs';
@@ -130,6 +131,16 @@ async function conversationByRef(ref) {
   return db.one('conversations', { slug });
 }
 
+// People a signup or purchase belongs to: by tracked-link code, or by email address.
+async function prospectsFor({ ref, email, product }) {
+  const out = [];
+  const byRef = await prospectByRef(ref);
+  if (byRef) out.push(byRef);
+  const e = lower(email);
+  if (e) for (const p of await db.select('prospects', { filters: { email: e, product_id: product || undefined } })) if (!out.some(x => x.id === p.id)) out.push(p);
+  return out;
+}
+
 async function getSource(name) { return (await db.one('settings', { key: 'source.' + name }))?.value || {}; }
 async function setSource(name, patch) {
   const value = { ...(await getSource(name)), ...patch };
@@ -149,7 +160,7 @@ export const actions = {
       APP_KEY: !!process.env.APP_KEY, SUPABASE_URL: !!process.env.SUPABASE_URL, SUPABASE_SERVICE_KEY: !!process.env.SUPABASE_SERVICE_KEY,
       OPENAI_API_KEY: !!process.env.OPENAI_API_KEY, GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
       GOOGLE_SA_EMAIL: !!process.env.GOOGLE_SA_EMAIL, GOOGLE_SA_KEY: !!process.env.GOOGLE_SA_KEY,
-      DIGEST_TO: !!process.env.DIGEST_TO, PURCHASE_SECRET: !!process.env.PURCHASE_SECRET,
+      DIGEST_TO: !!process.env.DIGEST_TO, PURCHASE_SECRET: !!process.env.PURCHASE_SECRET, TRACK_DOMAIN: !!trackDomain(),
       XAI_API_KEY: !!process.env.XAI_API_KEY, BSKY_HANDLE: !!(process.env.BSKY_HANDLE && process.env.BSKY_APP_PASSWORD),
     };
     let products = [];
@@ -173,7 +184,9 @@ export const actions = {
     } catch (e) {
       return { env, dbError: explainDbError(e.message), dbRaw: e.message, keyKind: keyKind(), dbHost: (() => { try { return new URL(projectUrl()).host; } catch { return ''; } })() };
     }
-    return { env, products, senders: await senders(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' };
+    // Tables added in later versions: if missing, the app keeps working but asks for schema.sql to be run again.
+    const schemaUpdate = await db.select('link_events', { select: 'id', limit: 1 }).then(() => false, () => true);
+    return { env, products, schemaUpdate, senders: await senders(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' };
   },
 
   async 'products.save'({ product }) {
@@ -249,7 +262,7 @@ export const actions = {
       filters, order: 'score.desc,created_at.asc', limit: Math.min(500, limit), offset,
     });
     const counts = {};
-    for (const st of ['new', 'scanned', 'drafted', 'contacted', 'replied', 'interested', 'won', 'rest', 'done', 'skipped'])
+    for (const st of ['new', 'scanned', 'drafted', 'contacted', 'replied', 'interested', 'signed_up', 'won', 'rest', 'done', 'skipped'])
       counts[st] = await db.count('prospects', { product_id: productId, status: st });
     return { rows, counts };
   },
@@ -321,7 +334,9 @@ export const actions = {
     const step = isRest ? p.step : p.step + 1;
     const previous = step > 1 ? await db.select('messages', { select: 'body,subject', filters: { prospect_id: p.id, status: 'sent' }, order: 'step.asc' }) : [];
     const angle = p.angle || pickAngle(product.angles || [], await angleStats(productId));
-    const out = await draftOnce({ product, prospect: p, step: Math.min(step, r.steps || step), angle, previous, fromName: product.from_name, problems: feedback });
+    const wantsLink = (r.links?.[Math.min(step, r.steps || step) - 1] ?? 0) > 0;
+    const link = wantsLink ? await linkFor(product, p) : undefined;
+    const out = await draftOnce({ product, prospect: p, step: Math.min(step, r.steps || step), angle, previous, fromName: product.from_name, problems: feedback, link });
 
     if (out.skip) {
       await db.update('prospects', { id: p.id }, { status: 'skipped', skip_reason: out.skip_reason });
@@ -456,7 +471,7 @@ export const actions = {
     const since = iso(now().getTime() - 60 * DAY);
     const ps = await db.select('prospects', {
       select: 'id,thread_id,email,name', order: 'last_sent_at.desc', limit: 300,
-      filters: { sender: lower(sender), thread_id: ['not.is', null], last_sent_at: ['gte', since], status: ['in', ['contacted', 'drafted', 'done', 'rest', 'replied', 'interested']] },
+      filters: { sender: lower(sender), thread_id: ['not.is', null], last_sent_at: ['gte', since], status: ['in', ['contacted', 'drafted', 'done', 'rest', 'replied', 'interested', 'signed_up']] },
     });
     const known = ps.length ? await db.select('replies', { select: 'gmail_id', filters: { prospect_id: ['in', ps.map(p => p.id)] } }) : [];
     const ours = ps.length ? await db.select('messages', { select: 'gmail_id', filters: { prospect_id: ['in', ps.map(p => p.id)], status: 'sent' } }) : [];
@@ -468,7 +483,7 @@ export const actions = {
     if (!p) throw new Error('Unknown prospect');
     if (await db.one('replies', { gmail_id: gmailId })) return { duplicate: true };
     const product = await getProduct(p.product_id);
-    const read = await readReply({ product, prospect: p, reply: { from, subject, body } });
+    const read = await readReply({ product, prospect: p, reply: { from, subject, body }, link: await linkFor(product, p) });
     const quiet = ['auto_reply'].includes(read.label);
     const [row] = await db.insert('replies', [{
       prospect_id: p.id, product_id: p.product_id, gmail_id: gmailId, from_addr: from, subject,
@@ -637,10 +652,19 @@ export const actions = {
   },
 
   // A product's site reports a signup that arrived through a Conversations link (?ref=ce_<slug>).
-  async 'signup.record'({ ref }) {
+  // Also credits the email that brought them (?ref=ce_<code>, or the same email address), and stops
+  // that person's follow-ups: someone who signed up shouldn't get "last note" emails.
+  async 'signup.record'({ ref, email, product }) {
     const row = await conversationByRef(ref);
     if (row) await db.update('conversations', { id: row.id }, { signups: (row.signups || 0) + 1 });
-    return { matched: row ? 1 : 0 };
+    const people = await prospectsFor({ ref, email, product });
+    for (const p of people) {
+      if (p.signed_up_at) continue;
+      await db.update('prospects', { id: p.id }, { signed_up_at: iso(now()), next_due_at: null, ...(p.status === 'won' ? {} : { status: 'signed_up' }) });
+      await db.update('messages', { prospect_id: p.id, status: ['in', ['draft', 'approved']] }, { status: 'rejected', error: 'they signed up' });
+      await logEvent('signup', p);
+    }
+    return { matched: (row ? 1 : 0) + people.length, prospects: people.length };
   },
 
   // A product's licence server (PayPal/Dodo webhook) reports a purchase: mark the buyer as won,
@@ -648,10 +672,10 @@ export const actions = {
   async 'purchase.record'({ email, product, ref }) {
     const conv = await conversationByRef(ref);
     if (conv) await db.update('conversations', { id: conv.id }, { purchases: (conv.purchases || 0) + 1 });
-    const e = lower(email);
-    if (!e) { if (conv) return { matched: 0, conversation: true }; throw new Error('email or ref required'); }
-    const ps = await db.select('prospects', { select: 'id,product_id,status', filters: { email: e, product_id: product || undefined } });
+    if (!lower(email) && !ref) throw new Error('email or ref required');
+    const ps = await prospectsFor({ ref, email, product });
     for (const p of ps) {
+      if (p.status !== 'won') await logEvent('purchase', p);
       await db.update('prospects', { id: p.id }, { status: 'won', next_due_at: null });
       await db.update('messages', { prospect_id: p.id, status: ['in', ['draft', 'approved']] }, { status: 'rejected', error: 'they bought' });
     }
@@ -772,7 +796,9 @@ export const actions = {
     const product = await getProduct(productId);
     const sent = await db.select('messages', { select: 'prospect_id,step,angle,sent_at,sender,edited', filters: { product_id: productId, status: 'sent' }, limit: 10000 });
     const replies = await db.select('replies', { select: 'prospect_id,label', filters: { product_id: productId }, limit: 10000 });
-    const ps = await db.select('prospects', { select: 'id,segment,score,status', filters: { product_id: productId, step: ['gte', 1] }, limit: 10000 });
+    const pf = { product_id: productId, step: ['gte', 1] };
+    const ps = await db.select('prospects', { select: 'id,name,email,segment,score,status,clicks,first_click_at,signed_up_at', filters: pf, limit: 10000 })
+      .catch(() => db.select('prospects', { select: 'id,segment,score,status', filters: pf, limit: 10000 }));   // before the tracking columns exist
     const byP = Object.fromEntries(ps.map(p => [p.id, p]));
     const labels = {};
     for (const r of replies) (labels[r.prospect_id] ||= new Set()).add(r.label);
@@ -783,8 +809,9 @@ export const actions = {
     const group = keyFn => {
       const g = {};
       for (const id of people) {
-        const k = keyFn(id); const row = g[k] ||= { people: 0, replied: 0, positive: 0, won: 0, bounced: 0 };
+        const k = keyFn(id); const row = g[k] ||= { people: 0, clicked: 0, replied: 0, positive: 0, signedUp: 0, won: 0, bounced: 0 };
         row.people++; if (replied(id)) row.replied++; if (positive(id)) row.positive++;
+        if (byP[id]?.first_click_at) row.clicked++; if (byP[id]?.signed_up_at || byP[id]?.status === 'signed_up') row.signedUp++;
         if (byP[id]?.status === 'won') row.won++; if (has(id, 'bounce')) row.bounced++;
       }
       return g;
@@ -804,6 +831,12 @@ export const actions = {
       sentToday: perSender,
       editRate: edits.length ? Math.round(100 * edits.filter(m => m.edited).length / edits.length) : null,
       angleStats: await angleStats(productId),
+      tracking: { domain: trackDomain() || null },
+      // Who clicked, newest first: warm people worth a personal note if they haven't replied.
+      clickers: ps.filter(p => p.first_click_at).sort((a, b) => Date.parse(b.first_click_at) - Date.parse(a.first_click_at)).slice(0, 50)
+        .map(p => ({ id: p.id, name: p.name, email: p.email, clicks: p.clicks, first_click_at: p.first_click_at, signed_up: !!p.signed_up_at, status: p.status, replied: replied(p.id) })),
+      clicksByStep: await db.select('link_events', { select: 'step', filters: { product_id: productId, kind: 'click' }, limit: 10000 })
+        .then(rows => rows.reduce((o, r) => ((o[r.step ?? '?'] = (o[r.step ?? '?'] || 0) + 1), o), {}), () => ({})),
     };
   },
 };

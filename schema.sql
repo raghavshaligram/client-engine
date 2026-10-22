@@ -193,6 +193,24 @@ alter table radar_seen enable row level security;
 alter table prospects add column if not exists verified text;
 alter table prospects add column if not exists verified_at timestamptz;
 
+-- Link tracking: one short code per person (their /go/<code> link), and every click, signup and purchase.
+alter table prospects add column if not exists link_slug text unique;
+alter table prospects add column if not exists clicks int not null default 0;
+alter table prospects add column if not exists first_click_at timestamptz;
+alter table prospects add column if not exists signed_up_at timestamptz;
+create table if not exists link_events (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,                  -- click | signup | purchase
+  product_id text,
+  prospect_id uuid references prospects(id) on delete cascade,
+  step int,                            -- how many emails they had had at the time
+  angle text,
+  segment text,
+  created_at timestamptz not null default now()
+);
+create index if not exists link_events_product on link_events(product_id, kind, created_at desc);
+alter table link_events enable row level security;
+
 -- Let the server's secret key use these tables through Supabase's API (newer projects don't grant this
 -- automatically), then tell the API to reload, so new tables show up straight away.
 grant usage on schema public to service_role;
