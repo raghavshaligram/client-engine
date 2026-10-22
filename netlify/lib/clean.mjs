@@ -143,6 +143,8 @@ export function fromRegistryRow(row, { productId, segment, sourceFile, defaultSt
         manager, county: (row.county || '').trim(), contact: (row.contact || '').trim(),
         generic_email: isGeneric(email),
         manager_email: /manag|mgmt|property|realty|partners|services/i.test(email.split('@')[1] || ''),
+        ...(row.registered ? { registered: row.registered } : {}),
+        ...(row.new_registration ? { new_registration: true } : {}),
       },
     },
   };

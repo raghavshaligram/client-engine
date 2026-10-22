@@ -23,6 +23,7 @@ await new Promise(r => sites.listen(0, '127.0.0.1', r));
 process.env.SITE_PORT = String(sites.address().port);
 
 installFetch({ db: fakeDb(), ai: fakeOpenAI(), passthrough: true, testHosts: true });
+if (process.env.BLOCK_VA) { const f = globalThis.fetch; globalThis.fetch = (u, i) => String(u).includes('dpor.virginia.gov') ? Promise.resolve(new Response('blocked', { status: 403 })) : f(u, i); }
 const { default: handler } = await import('../netlify/functions/api.mjs');
 
 const CSP = fs.readFileSync(path.join(root, 'netlify.toml'), 'utf8').match(/Content-Security-Policy = "([^"]+)"/)[1];

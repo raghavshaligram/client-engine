@@ -8,6 +8,7 @@ import { score } from './score.mjs';
 import { draftOnce, footer, readReply, pickAngle } from './brain.mjs';
 import { serverGmailReady, send as gmailSend, thread as gmailThread, header } from './gmail.mjs';
 import { senderPlan, warmupHealth, checkDomain } from './warmup.mjs';
+import { virginiaRows, texasRow, VIRGINIA_URL } from './sources.mjs';
 
 
 const DAY = 86_400_000;
@@ -102,6 +103,13 @@ export async function checkBrakes(productId) {
   return reason;
 }
 
+async function getSource(name) { return (await db.one('settings', { key: 'source.' + name }))?.value || {}; }
+async function setSource(name, patch) {
+  const value = { ...(await getSource(name)), ...patch };
+  await db.upsert('settings', [{ key: 'source.' + name, value, updated_at: iso(now()) }], 'key');
+  return value;
+}
+
 export async function senders() {
   const row = await db.one('settings', { key: 'senders' });
   return row?.value || [];
@@ -122,6 +130,13 @@ export const actions = {
       const have = new Set(products.map(p => p.id));
       const missing = SEED_PRODUCTS.filter(p => !have.has(p.id));
       if (missing.length) { await db.insert('products', missing); products = await db.select('products', { order: 'id' }); }
+      // Segments added in later versions reach databases created before them.
+      const hoa = products.find(p => p.id === 'keephoa');
+      if (hoa && !(hoa.segments || []).some(s => s.id === 'texas')) {
+        const segments = [...(hoa.segments || []), { id: 'texas', name: 'Texas registry', ask: 'Want to see what the year-end handoff looks like?', landing: 'https://keephoa.com' }];
+        await db.update('products', { id: 'keephoa' }, { segments });
+        hoa.segments = segments;
+      }
     } catch (e) {
       return { env, dbError: /relation|does not exist|schema cache/i.test(e.message) ? 'Tables not found. Run schema.sql in the Supabase SQL Editor.' : e.message };
     }
@@ -479,6 +494,51 @@ export const actions = {
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) throw new Error('Not a domain: ' + domain);
     if (/^(pdfmacro|keephoa|ringsparrow)\.com$/.test(d)) throw new Error(`${d} is a product domain. Cold email goes from separate sending domains.`);
     return { domain: d, checks: await checkDomain(d) };
+  },
+
+  // Virginia's association list. The server downloads it weekly; if Virginia refuses the server,
+  // the nightly job on your computer downloads it and sends the text here instead.
+  async 'source.virginia'({ text }) {
+    let body = text, how = 'uploaded from your computer';
+    if (!body) {
+      how = 'downloaded by the server';
+      try {
+        const res = await fetch(VIRGINIA_URL, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ClientEngine/1.0)' } });
+        if (!res.ok) throw new Error('Virginia answered ' + res.status);
+        body = await res.text();
+      } catch (e) {
+        await setSource('virginia', { last_error: e.message, last_try: iso(now()) });
+        throw new Error('Could not download the Virginia list: ' + e.message + '. Your computer will try tonight.');
+      }
+    }
+    const v = virginiaRows(body);
+    let added = 0; const skipped = { ...v.skipped };
+    for (let i = 0; i < v.rows.length; i += 400) {
+      const r = await actions['prospects.import']({ productId: 'keephoa', segment: 'virginia', kind: 'registry', rows: v.rows.slice(i, i + 400), sourceFile: 'Virginia DPOR 0550', defaultState: 'VA' });
+      added += r.added;
+      for (const [k, n] of Object.entries(r.skipped)) skipped[k] = (skipped[k] || 0) + n;
+    }
+    const summary = { last_ok: iso(now()), last_error: null, total: v.total, volunteers: v.rows.length, added, how };
+    await setSource('virginia', summary);
+    return { ...summary, skipped };
+  },
+
+  // Texas certificates read overnight on your computer: only personal addresses become prospects.
+  async 'source.texas'({ certs = [], done = 0, offset }) {
+    const rows = certs.map(texasRow).filter(Boolean);
+    const r = rows.length ? await actions['prospects.import']({ productId: 'keephoa', segment: 'texas', kind: 'registry', rows, sourceFile: 'Texas TREC certificates', defaultState: 'TX' }) : { added: 0, skipped: {} };
+    const prev = await getSource('texas');
+    await setSource('texas', {
+      last_ok: iso(now()), offset: offset ?? prev.offset ?? 0,
+      read: (prev.read || 0) + done, volunteers: (prev.volunteers || 0) + rows.length, added: (prev.added || 0) + r.added,
+    });
+    return { volunteers: rows.length, added: r.added, skipped: r.skipped };
+  },
+
+  async 'source.status'() {
+    const va = await getSource('virginia'), tx = await getSource('texas');
+    const stale = !va.last_ok || now() - Date.parse(va.last_ok) > 8 * DAY;
+    return { virginia: { ...va, needsUpload: stale && !!va.last_error }, texas: tx };
   },
 
   async 'autopilot.status'() {

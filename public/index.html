@@ -304,7 +304,10 @@ VIEWS.find = async () => {
       <h2>1. Who to look for</h2>
       <label>Segment</label><select id="fSeg">${segOpts}</select>
       ${isRegistry ? `
-        <p class="sub" style="margin-top:12px">KeepHOA prospects come from state HOA registry files (see your outreach plan): Colorado and Virginia first. Download the file from the state, read its terms of use, then import it below.</p>
+        <div class="note" style="margin-top:12px"><b>Found on their own:</b> only addresses that look like a volunteer's (Gmail, Yahoo and the like) are kept; management companies are skipped.
+          <div id="srcStatus" class="small" style="margin-top:6px">Checking…</div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="vaNow">Refresh Virginia now</button></div></div>
+        <p class="sub" style="margin-top:12px">Another state's file? Download it, read its terms of use, then import it below.</p>
       ` : `
         <div class="grid2">
           <div><label>Business types <small>one per line</small></label><textarea id="fTypes" placeholder="${p.id === 'pdfmacro' ? 'family law attorney\ndivorce lawyer' : 'plumber\nhvac contractor\nelectrician'}">${esc(store.get('types.' + p.id, ''))}</textarea></div>
@@ -333,6 +336,20 @@ VIEWS.find = async () => {
       <div id="fScanLog" class="log hide" style="margin-top:10px"></div>
     </div>`}`;
   const seg = $('#fSeg'); seg.value = store.get('seg.' + p.id, seg.value); seg.onchange = () => store.set('seg.' + p.id, seg.value);
+  if (isRegistry) {
+    const showSrc = async () => {
+      const st = await api('source.status'), va = st.virginia || {}, tx = st.texas || {};
+      $('#srcStatus').innerHTML = `<b>Virginia</b>, every Monday: ${va.last_ok ? `last refreshed ${fmtDate(va.last_ok)}, ${va.volunteers} volunteer addresses out of ${va.total} associations` : 'not run yet'}${va.last_error ? ` <span class="pill warn">server blocked; your computer fetches it tonight</span>` : ''}<br>
+        <b>Texas</b>, nightly on your computer: ${tx.read ? `${tx.read} of about 17,400 certificates read, ${tx.volunteers} volunteers found` : 'not run yet (needs the nightly job and Docker)'}`;
+    };
+    showSrc().catch(e => { $('#srcStatus').textContent = e.message; });
+    $('#vaNow').onclick = async () => {
+      $('#vaNow').disabled = true;
+      try { const r = await api('source.virginia'); toast(`Virginia: ${r.added} new volunteers added.`); }
+      catch (e) { toast(e.message, 6000); }
+      $('#vaNow').disabled = false; showSrc();
+    };
+  }
 
   if (!isRegistry) {
     const loadPlan = async () => {

@@ -7,6 +7,8 @@ Finds prospects for PDFMacro, KeepHOA and RingSparrow, reads their websites, wri
 | What | Where | When |
 |---|---|---|
 | Find businesses (Google Maps scraper) | Your computer, Windows scheduled task | 1:30am nightly, only for products with fewer than 150 people ready |
+| KeepHOA: Virginia association list | Netlify, `sources-weekly` (your computer as fallback) | Mondays. Keeps volunteer addresses only; new associations only after the first run |
+| KeepHOA: Texas HOA certificates | Your computer, same nightly job (OCR in Docker) | 200 certificates a night, volunteer addresses only |
 | Read websites, write and check drafts | Netlify, `autopilot-research` | Every 10 minutes |
 | Approve drafts | Netlify | You approve the first 50 first emails per product. After that, once you're editing fewer than 15%, drafts scored 8+ go out on their own |
 | Warm up new inboxes | Netlify, `autopilot-send` | 14 days of inbox-to-inbox emails and replies, then it keeps going at 8 a day |
@@ -83,7 +85,11 @@ This lets the app send as your inboxes with no sign-in that expires and no Googl
 
 Each night it asks the app which searches are due, runs them, and uploads the results. Logs are in `scraper\logs`. To run it now: `Start-ScheduledTask -TaskName "Client Engine scraper"`.
 
-KeepHOA uses state registry files instead: import them once on the Find people screen.
+KeepHOA finds its own leads from two state lists. Only addresses that look like a volunteer's (Gmail, Yahoo, Outlook and similar) become prospects; management-company addresses are skipped.
+- **Virginia** (DPOR association list, about 7,150 associations, about 1,960 with a volunteer's address): the server downloads it every Monday. If Virginia refuses the server, the nightly job downloads it from your computer instead. Associations registered in the last year score higher (a new board is the best time to set up books).
+- **Texas** (TREC HOA management certificates, about 17,400): the nightly job reads 200 certificates a night with OCR in Docker. Nearly all Texas certificates are filed by management companies, so expect only a few volunteers per 100 read. Change `texasPerNight` in `config.json` (0 turns it off). The OCR image builds itself on the first run.
+
+Other states' files can still be imported by hand on the Find people screen.
 
 ### 6. Purchases (so the learner knows what sells)
 In each product's licence server, after a successful payment, add:

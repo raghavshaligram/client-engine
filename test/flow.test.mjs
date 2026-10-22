@@ -236,7 +236,7 @@ test('KeepHOA registry import: one email + one follow-up, reason line in footer'
   assert.equal(q.prospect, 'Maple Court HOA');
   const list = await A['queue.list']({ productId: 'keephoa' });
   const msg = list.messages.find(m => m.prospect.name === 'Maple Court HOA');
-  assert.match(msg.footer, /CO public HOA registry/);
+  assert.match(msg.footer, /Colorado public HOA registry/);
   // KeepHOA link carries a tracking tag; RingSparrow's does not.
   const { landingLink } = await import('../netlify/lib/brain.mjs');
   const kp = db.T.products.find(p => p.id === 'keephoa'), rp = db.T.products.find(p => p.id === 'ringsparrow');

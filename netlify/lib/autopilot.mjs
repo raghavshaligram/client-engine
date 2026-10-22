@@ -136,6 +136,10 @@ export async function digestText(now = new Date()) {
     const plan = senderPlan(s, now);
     lines.push(plan.warming ? `Inbox ${s.email}: warming up, day ${plan.day + 1} of 14.` : `Inbox ${s.email}: up to ${plan.coldCap} cold emails today (max ${s.daily_cap}).`);
   }
+  const va = (await db.one('settings', { key: 'source.virginia' }))?.value;
+  const tx = (await db.one('settings', { key: 'source.texas' }))?.value;
+  if (va?.last_error) lines.push(`Virginia list: the server could not download it (${va.last_error}). Your computer will fetch it tonight.`);
+  if (tx?.read) lines.push(`Texas certificates read so far: ${tx.read}, volunteers found: ${tx.volunteers}.`);
   lines.push('');
   for (const p of await db.select('products', { order: 'id' })) {
     const st = await autopilotState(p);

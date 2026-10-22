@@ -35,6 +35,7 @@ export function score(p, product) {
       if (x.manager_email) add(-3, 'email looks like a management company');
     }
     if (p.units && p.units <= 150) add(2, `small association (${p.units} units)`);
+    if (x.new_registration) add(2, 'registered with the state in the last year (likely a new board)');
   }
   if (x.generic_email && product.id !== 'keephoa') add(-1, 'generic address');
   return { score: n, score_why: why.join('; ') || 'no signals yet' };

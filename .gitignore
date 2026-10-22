@@ -6,4 +6,5 @@ scraper/config.json
 scraper/logs/
 scraper/gmaps-output/
 scraper/queries-*.txt
+scraper/texas-work/
 *.csv
