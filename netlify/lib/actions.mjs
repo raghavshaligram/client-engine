@@ -38,6 +38,15 @@ export async function autopilotState(p) {
   return { mode, on, approvedByYou: mine.length, needed: LEARN_APPROVALS, editRate: recent.length ? Math.round(editRate * 100) : null };
 }
 
+// Database errors in plain words, with the fix.
+export function explainDbError(m) {
+  if (/not set in Netlify/.test(m)) return m + '. Add it, then redeploy.';
+  if (/relation .* does not exist|schema cache|Could not find the table/i.test(m)) return 'Supabase is connected, but the tables are missing. Run all of schema.sql in the SQL Editor of the same project SUPABASE_URL points to.';
+  if (/row-level security/i.test(m)) return 'That key is the public (anon or publishable) key. Use the secret key instead: Supabase > Project settings > API Keys > secret (sb_secret_...), or the legacy service_role key.';
+  if (/Invalid API key|invalid.*jwt|JWS|JWT|Unauthorized|No API key/i.test(m)) return "Supabase didn't accept SUPABASE_SERVICE_KEY. Copy the secret key again from Project settings > API Keys (it must belong to the same project as SUPABASE_URL), then redeploy.";
+  return m;
+}
+
 export function purchaseAuthorised(req) {
   const want = process.env.PURCHASE_SECRET || '';
   const got = req.headers.get('x-purchase-secret') || '';
@@ -153,7 +162,7 @@ export const actions = {
         hoa.segments = segments;
       }
     } catch (e) {
-      return { env, dbError: /relation|does not exist|schema cache/i.test(e.message) ? 'Tables not found. Run schema.sql in the Supabase SQL Editor.' : e.message };
+      return { env, dbError: explainDbError(e.message) };
     }
     return { env, products, senders: await senders(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' };
   },

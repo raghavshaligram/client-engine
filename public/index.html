@@ -237,14 +237,15 @@ const ENV_HELP = {
 VIEWS.setup = async () => {
   const s = S.setup || {}, env = s.env || {};
   const needDb = !env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY;
-  const noTables = /schema\.sql|Tables not found/i.test(s.dbError || '');
+  const noTables = /tables are missing/i.test(s.dbError || '');
+  const otherErr = s.dbError && !needDb && !noTables;
   $('#view').innerHTML = `
     <div class="note warn"><b>The database isn't connected yet, so there's nothing to show.</b> ${s.dbError ? esc(s.dbError) : ''}</div>
     <div class="card"><h2>Steps</h2>
       <table>
-        <tr><td>1. Create a Supabase project (separate from your other apps)</td><td>${needDb ? '<span class="pill warn">To do</span>' : '<span class="pill good">Done</span>'}</td></tr>
-        <tr><td>2. In Netlify, add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code>, scope including Functions, then Deploys > Trigger deploy</td><td>${needDb ? '<span class="pill warn">To do</span>' : '<span class="pill good">Done</span>'}</td></tr>
-        <tr><td>3. In Supabase, SQL Editor > New query: paste all of <code>schema.sql</code> from the GitHub repo and press Run</td><td>${needDb ? '<span class="pill">After step 2</span>' : noTables ? '<span class="pill warn">To do</span>' : s.dbError ? '<span class="pill bad">Check the error above</span>' : '<span class="pill good">Done</span>'}</td></tr>
+        <tr><td>1. Create a Supabase project (separate from your other apps)</td><td>${needDb ? '<span class="pill">Can\'t tell yet</span>' : '<span class="pill good">Done</span>'}</td></tr>
+        <tr><td>2. In Netlify, add <code>SUPABASE_URL</code> (the Project URL) and <code>SUPABASE_SERVICE_KEY</code> (the secret key), scope including Functions, then Deploys > Trigger deploy</td><td>${needDb ? '<span class="pill warn">To do: the app can\'t see them yet</span>' : otherErr ? '<span class="pill bad">See the message above</span>' : '<span class="pill good">Done</span>'}</td></tr>
+        <tr><td>3. In Supabase, SQL Editor > New query: paste all of <code>schema.sql</code> from the GitHub repo and press Run</td><td>${needDb || otherErr ? '<span class="pill">After step 2</span>' : noTables ? '<span class="pill warn">To do</span>' : '<span class="pill good">Done</span>'}</td></tr>
         <tr><td>4. Press Check again</td><td><button class="btn small primary" id="recheck">Check again</button></td></tr>
       </table>
     </div>

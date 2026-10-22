@@ -29,7 +29,7 @@ Finds prospects for PDFMacro, KeepHOA and RingSparrow, reads their websites, wri
 ### 1. Supabase
 1. Create a new project (separate from RingSparrow's and PDFMacro's).
 2. SQL Editor → New query → paste all of `schema.sql` → Run.
-3. Project settings → API: copy the **Project URL** and the **service_role** key. The service key is secret; it only ever goes into Netlify.
+3. Project settings → API Keys: copy the **Project URL** and the **secret** key (`sb_secret_…`; the legacy `service_role` key also works). Never the publishable/anon key. The secret key only ever goes into Netlify.
 
 ### 2. Google Workspace (sending on its own)
 Use **one Workspace account per product** (for example getpdfmacro.com, getkeephoa.com, getringsparrow.co), each with one or two inboxes in your own name. Separate accounts matter for two reasons: warm-up emails between them travel the normal way, so they build real reputation (mail inside one Workspace account barely counts), and a problem on one product's domain can't hurt the others.
