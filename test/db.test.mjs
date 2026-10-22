@@ -23,8 +23,9 @@ test('new-style secret keys go only on the apikey header', async () => {
 });
 
 test('database errors explained', () => {
-  assert.match(explainDbError('Database GET products: relation "public.products" does not exist'), /tables are missing/);
-  assert.match(explainDbError("Database GET products: Could not find the table 'public.products' in the schema cache"), /tables are missing/);
+  assert.match(explainDbError('Database GET products: relation "public.products" does not exist'), /can't see the tables/);
+  assert.match(explainDbError("Database GET products: Could not find the table 'public.products' in the schema cache"), /can't see the tables/);
+  assert.match(explainDbError('Database GET products: permission denied for table products'), /isn't allowed to use the tables/);
   assert.match(explainDbError('Database POST products: new row violates row-level security policy'), /public \(anon or publishable\) key/);
   assert.match(explainDbError('Database GET products: Invalid API key'), /didn't accept SUPABASE_SERVICE_KEY/);
 });

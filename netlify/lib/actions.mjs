@@ -41,7 +41,8 @@ export async function autopilotState(p) {
 // Database errors in plain words, with the fix.
 export function explainDbError(m) {
   if (/not set in Netlify/.test(m)) return m + '. Add it, then redeploy.';
-  if (/relation .* does not exist|schema cache|Could not find the table/i.test(m)) return 'Supabase is connected, but the tables are missing. Run all of schema.sql in the SQL Editor of the same project SUPABASE_URL points to.';
+  if (/relation .* does not exist|schema cache|Could not find the table/i.test(m)) return "Supabase is connected, but its API can't see the tables. Run all of schema.sql again (its last lines give the API access and reload it), in the same project SUPABASE_URL points to.";
+  if (/permission denied/i.test(m)) return "Supabase is connected, but the API isn't allowed to use the tables. Run all of schema.sql again: its last lines grant that access.";
   if (/row-level security/i.test(m)) return 'That key is the public (anon or publishable) key. Use the secret key instead: Supabase > Project settings > API Keys > secret (sb_secret_...), or the legacy service_role key.';
   if (/Invalid API key|invalid.*jwt|JWS|JWT|Unauthorized|No API key/i.test(m)) return "Supabase didn't accept SUPABASE_SERVICE_KEY. Copy the secret key again from Project settings > API Keys (it must belong to the same project as SUPABASE_URL), then redeploy.";
   return m;
@@ -162,7 +163,7 @@ export const actions = {
         hoa.segments = segments;
       }
     } catch (e) {
-      return { env, dbError: explainDbError(e.message) };
+      return { env, dbError: explainDbError(e.message), dbRaw: e.message };
     }
     return { env, products, senders: await senders(), googleClientId: process.env.GOOGLE_CLIENT_ID || '', model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' };
   },

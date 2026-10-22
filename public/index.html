@@ -237,10 +237,11 @@ const ENV_HELP = {
 VIEWS.setup = async () => {
   const s = S.setup || {}, env = s.env || {};
   const needDb = !env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY;
-  const noTables = /tables are missing/i.test(s.dbError || '');
+  const noTables = /can't see the tables|isn't allowed to use the tables/i.test(s.dbError || '');
   const otherErr = s.dbError && !needDb && !noTables;
   $('#view').innerHTML = `
-    <div class="note warn"><b>The database isn't connected yet, so there's nothing to show.</b> ${s.dbError ? esc(s.dbError) : ''}</div>
+    <div class="note warn"><b>The database isn't connected yet, so there's nothing to show.</b> ${s.dbError ? esc(s.dbError) : ''}
+      ${s.dbRaw && s.dbRaw !== s.dbError ? `<div class="small mono" style="margin-top:6px;opacity:.8">Supabase said: ${esc(s.dbRaw)}</div>` : ''}</div>
     <div class="card"><h2>Steps</h2>
       <table>
         <tr><td>1. Create a Supabase project (separate from your other apps)</td><td>${needDb ? '<span class="pill">Can\'t tell yet</span>' : '<span class="pill good">Done</span>'}</td></tr>

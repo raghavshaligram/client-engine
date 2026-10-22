@@ -192,3 +192,12 @@ alter table radar_seen enable row level security;
 -- Email checks (Reacher, run nightly on your computer): safe | risky | unknown | invalid. Null = not checked yet.
 alter table prospects add column if not exists verified text;
 alter table prospects add column if not exists verified_at timestamptz;
+
+-- Let the server's secret key use these tables through Supabase's API (newer projects don't grant this
+-- automatically), then tell the API to reload, so new tables show up straight away.
+grant usage on schema public to service_role;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+notify pgrst, 'reload schema';
