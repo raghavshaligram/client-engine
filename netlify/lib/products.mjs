@@ -38,6 +38,20 @@ export const RADAR_DEFAULTS = {
     competitors: ['GoHighLevel', 'Podium', 'SimpleTexting', 'Textline'],
     voice: '',
   },
+  nodstage: {
+    on: false,
+    sources: { reddit: true, forums: true, x: true, linkedin: true, hn: false, bluesky: false },
+    keywords: [
+      'client feedback tool for designers', 'clients send feedback everywhere', 'too many revision rounds', 'scope creep revisions client',
+      'client portal for agency', 'client portal for design studio', 'change order template design', 'how to charge for extra revisions',
+      'proofing tool for agency', 'agency project management tool', 'too many tools agency', 'all in one tool for creative agency',
+      'invoice extra work client', 'client approval workflow design', 'video review tool for clients',
+    ],
+    subreddits: ['graphic_design', 'web_design', 'agency', 'freelance', 'videography', 'editors', 'branding', 'smallbusiness'],
+    forumDomains: ['quora.com'],
+    competitors: ['email threads', 'spreadsheets', 'separate proofing, project and invoicing tools'],
+    voice: '',
+  },
 };
 
 // Starting product files. Loaded into the database the first time the app opens.
@@ -173,5 +187,50 @@ export const SEED_PRODUCTS = [
     from_name: '',
     postal_address: '',
     radar: RADAR_DEFAULTS.ringsparrow,
+  },
+  {
+    id: 'nodstage',
+    name: 'Nodstage',
+    site: 'https://nodstage.com',
+    price: 'Free plan to start. Freelancer $15/mo, Studio $39/mo billed yearly ($49 monthly), Agency $99/mo. One price per studio: clients and freelancers you bring in are free.',
+    buyer: 'Owners of creative studios with 1 to 10 people: branding and design studios, web agencies, video and motion studios.',
+    pains: [
+      'Client feedback arrives in emails, voice notes, screenshots and chat, and someone has to turn it into a list of changes.',
+      'Extra rounds and extra work slip in without being priced, because nothing connects the request to the invoice.',
+      'The studio runs on separate tools for leads, proposals, projects, proofing and invoices, and copies information between them.',
+    ].join('\n'),
+    proof: [
+      'A branded client portal where clients review work and leave feedback by comment, voice, video or drawing on the file, without creating an account.',
+      'Client comments become tasks for the team.',
+      'Change orders: extra work is priced, approved by the client and lands on the invoice.',
+      'Pipeline, booking, proposals, projects and tasks, invoices and payments, testimonials, reports and automations in one workspace.',
+      'Free to sign up.',
+    ].join('\n'),
+    offer: 'Free to sign up.',
+    never_say: [
+      'Do not claim any customer count, studio name, testimonial, review or endorsement.',
+      'Do not name or criticise any competitor.',
+      'Do not say "AI".',
+      'Do not promise time or money saved as a number.',
+      'Do not say it integrates with a specific tool unless the product file lists it.',
+    ].join('\n'),
+    angles: [
+      { id: 'feedback', name: 'Feedback in one place', hook: 'Client feedback lands on the work itself, as comments, voice or drawings, and becomes tasks; clients never make an account.' },
+      { id: 'rounds', name: 'Extra rounds get paid', hook: 'Extra work becomes a change order the client approves, and it lands on the invoice.' },
+      { id: 'connected', name: 'The whole studio connected', hook: 'Lead, proposal, project, feedback and invoice in one workspace instead of five tools.' },
+    ],
+    segments: [
+      { id: 'design', name: 'Design and branding studios', ask: 'Worth a 2-minute video of a client leaving feedback on a logo round?', landing: 'https://nodstage.com' },
+      { id: 'web', name: 'Web agencies', ask: 'Worth a 2-minute video of a client marking up a page and it becoming tasks?', landing: 'https://nodstage.com' },
+      { id: 'video', name: 'Video and motion studios', ask: 'Worth a 2-minute video of a client leaving notes on a cut?', landing: 'https://nodstage.com' },
+    ],
+    rules: {
+      steps: 3, gaps: [0, 4, 9], words: [90, 60, 40],
+      links: [0, 0, 1], tracking: true, min_score: 3,
+      reason_line: '', need_own_domain_email: true, rest_days: 90, find_owner: true,
+    },
+    from_name: '',
+    postal_address: '',
+    radar: RADAR_DEFAULTS.nodstage,
   },
 ];

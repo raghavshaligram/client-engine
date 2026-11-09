@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import { db, projectUrl } from './db.mjs';
 import { linkFor, logEvent, prospectByRef, trackDomain } from './track.mjs';
 import { SEED_PRODUCTS, RADAR_DEFAULTS } from './products.mjs';
-import { fromMapsRow, fromRegistryRow, lower } from './clean.mjs';
+import { fromMapsRow, fromRegistryRow, lower, isGeneric } from './clean.mjs';
 import { scanSite } from './scan.mjs';
+import { findOwner } from './people.mjs';
 import { score } from './score.mjs';
 import { draftOnce, footer, readReply, pickAngle } from './brain.mjs';
 import { serverGmailReady, send as gmailSend, thread as gmailThread, header } from './gmail.mjs';
@@ -153,6 +154,26 @@ export async function senders() {
   return row?.value || [];
 }
 
+// The owner named on the prospect's own site. Their printed address replaces a generic one at once;
+// a guessed one only when email checks are on, and it must check out as "safe" or we fall back (verify.results).
+async function ownerPatch(p, s, { checking, deadline }) {
+  const x = { ...(p.extra || {}) };
+  let found;
+  try { found = await findOwner({ homeUrl: s.url, homeHtml: s.html, homeEmails: s.emails, website: p.website, businessName: p.name, deadline }); }
+  catch { return {}; }
+  const o = found.owner;
+  if (!o) return { extra: { ...x, owner_checked: true } };
+  Object.assign(x, { owner_checked: true, contact: o.name, contact_title: o.title, owner_email_source: o.source });
+  const patch = { extra: x };
+  const usable = o.email && o.email !== p.email && (o.source === 'published' || (checking && x.generic_email !== false));
+  if (!usable) return patch;
+  const taken = await db.one('prospects', { product_id: p.product_id, email: o.email });
+  if (taken) return patch;
+  if (await suppressedSet([o.email]).then(s => s.size)) return patch;
+  Object.assign(x, { generic_email: false, email_before_owner: p.email, email_guess: o.source !== 'published' });
+  return { ...patch, email: o.email, verified: null };
+}
+
 // ---- Actions -----------------------------------------------------------------
 export const actions = {
   async 'setup.status'() {
@@ -284,14 +305,18 @@ export const actions = {
   async 'prospects.scan'({ productId, limit = 4 }) {
     const product = await getProduct(productId);
     const batch = await db.select('prospects', { filters: { product_id: productId, status: 'new' }, order: 'created_at.asc', limit: Math.min(6, limit) });
+    const findOwners = !!product.rules?.find_owner;
+    const checking = findOwners && !!(await db.one('settings', { key: 'verify.enabled' }))?.value;
+    const started = Date.now();
     const results = await Promise.all(batch.map(async p => {
       let patch = { status: 'scanned' };
       if (p.website) {
         try {
           const s = await scanSite(p.website);
           patch.signals = s.signals; patch.site_text = s.site_text;
+          if (findOwners) Object.assign(patch, await ownerPatch(p, s, { checking, deadline: started + 8000 }));
         } catch (e) {
-          patch.extra = { ...(p.extra || {}), scan_error: e.message };
+          patch.extra = { ...(p.extra || {}), ...(patch.extra || {}), scan_error: e.message };
         }
       }
       Object.assign(patch, score({ ...p, ...patch }, product));
@@ -741,6 +766,15 @@ export const actions = {
       const p = await db.one('prospects', { id: r.id });
       if (!p) continue;
       const patch = { verified: v, verified_at: iso(now()) };
+      const x = p.extra || {};
+      if (x.email_guess && v !== 'safe' && x.email_before_owner) {
+        // A guessed owner address that can't be confirmed is never sent to: go back to the address the site printed.
+        const extra = { ...x, email_guess: false, owner_guess_failed: `${p.email} (${v})`, generic_email: isGeneric(x.email_before_owner) };
+        const back = { email: x.email_before_owner, verified: null, verified_at: null, extra };
+        await db.update('prospects', { id: p.id }, { ...back, ...score({ ...p, ...back }, products[p.product_id]) });
+        counts['owner guess dropped'] = (counts['owner guess dropped'] || 0) + 1;
+        continue;
+      }
       if (v === 'invalid') Object.assign(patch, { status: 'skipped', skip_reason: 'email address does not exist (checked)' });
       else Object.assign(patch, score({ ...p, verified: v }, products[p.product_id]));
       await db.update('prospects', { id: p.id }, patch);

@@ -54,7 +54,7 @@ function prospectFacts(pr) {
     pr.source === 'registry' && `Source: ${pr.state} public HOA registry`,
     Object.keys(s).length && `Website check: text chat ${s.chat ? 'yes' : 'no'}, online booking ${s.booking ? 'yes' : 'no'}, click-to-call ${s.click_to_call ? 'yes' : 'no'}${s.practice?.length ? ', practice areas: ' + s.practice.join(', ') : ''}`,
     x.test_call && `Test call made: ${x.test_call}`,
-    x.contact && `Contact name on file: ${x.contact}`,
+    x.contact && `Contact name on file: ${x.contact}${x.contact_title ? ` (${x.contact_title}, as named on their own website)` : ''}`,
     x.registered && `Registered with the state on ${x.registered}${x.new_registration ? ' (within the last year)' : ''}`,
   ].filter(Boolean);
   return lines.join('\n') + (pr.site_text ? `\n\nTEXT FROM THEIR WEBSITE (the only source for a personal detail):\n${pr.site_text}` : '') +

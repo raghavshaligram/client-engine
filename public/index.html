@@ -500,7 +500,7 @@ VIEWS.prospects = async () => {
       ${status === 'scanned' ? `<p class="sub">Sorted by score. Only people at or above the minimum score of ${p.rules?.min_score ?? 0} get emails. <button class="btn small" id="rescore">Rescore everyone</button></p>` : ''}
       ${r.rows.length ? `<table><tr><th>Who</th><th>Score</th><th>Why</th><th></th></tr>
         ${r.rows.map(x => `<tr data-id="${x.id}">
-          <td><b>${esc(x.name)}</b><br><span class="small">${esc(x.email)}</span><br><span class="muted small">${esc([x.category, x.city, x.state].filter(Boolean).join(' · '))}</span>
+          <td><b>${esc(x.name)}</b>${x.extra?.contact ? `<br><span class="small">${esc(x.extra.contact)}${x.extra.contact_title ? ', ' + esc(x.extra.contact_title) : ''}</span>` : ''}<br><span class="small">${esc(x.email)}</span>${x.extra?.email_guess ? ' <span class="pill warn" title="Guessed from the site; sent only if the check says the mailbox exists">guessed</span>' : ''}<br><span class="muted small">${esc([x.category, x.city, x.state].filter(Boolean).join(' · '))}</span>
             ${x.website ? `<br><a class="small" href="${esc(x.website)}" target="_blank" rel="noopener noreferrer">${esc(x.website.replace(/^https?:\/\//, '').slice(0, 40))}</a>` : ''}</td>
           <td class="num"><b>${x.score}</b></td>
           <td class="small">${esc(x.score_why)}${x.skip_reason ? `<br><span class="pill warn">${esc(x.skip_reason)}</span>` : ''}${x.detail ? `<br><span class="muted">Detail used: ${esc(x.detail)}</span>` : ''}
