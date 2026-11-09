@@ -3,6 +3,7 @@
 
 const CALL_TRADES = /plumb|hvac|heating|air condition|electric|roof|tile|floor|locksmith|salon|barber|dental|dentist|clinic|chiropract|garage door|pest|landscap|lawn|handyman|contractor|remodel|cleaning|towing|auto repair|mechanic|appliance|septic|pool|painter|painting|gutter|fence|moving|movers|spa|massage|veterinar|med spa|physical therap/i;
 const AGENCY = /marketing|advertising|web design|website design|seo|digital agency|lead gen|media agency|branding/i;
+const STUDIO = /design|branding|brand studio|creative|studio|web (design|development)|video production|motion|animation|film production|agency/i;
 const PRACTICE = { family: /family|divorce|custody/i, immigration: /immigration/i, pi: /personal injury|accident|injury/i };
 
 export function score(p, product) {
@@ -27,6 +28,11 @@ export function score(p, product) {
     if (area ? area.test(practice) : /law|attorney|lawyer/i.test(practice)) add(3, 'practice area matches');
     if (s.small) add(1, 'solo or small firm');
     if (x.generic_email === false) add(1, 'named person, not info@');
+    if (p.site_text) add(1, 'site has something real to mention');
+  } else if (product.id === 'nodstage') {
+    if (STUDIO.test(`${p.category} ${p.name}`)) add(2, 'creative studio or agency');
+    if (s.small) add(1, 'small team');
+    if (x.contact) add(2, `owner named on their site (${x.contact_title || 'owner'})`);
     if (p.site_text) add(1, 'site has something real to mention');
   } else if (product.id === 'keephoa') {
     if (p.self_managed === true) add(3, 'listed as self-managed');

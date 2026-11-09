@@ -226,8 +226,8 @@ export const SEED_PRODUCTS = [
     ],
     rules: {
       steps: 3, gaps: [0, 4, 9], words: [90, 60, 40],
-      links: [0, 0, 1], tracking: true, min_score: 4,
-      reason_line: '', need_own_domain_email: true, rest_days: 90,
+      links: [0, 0, 1], tracking: true, min_score: 3,
+      reason_line: '', need_own_domain_email: true, rest_days: 90, find_owner: true,
     },
     from_name: '',
     postal_address: '',
